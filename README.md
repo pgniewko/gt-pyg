@@ -10,4 +10,7 @@ Graph Transformer Network in PyG
 
 
 
+## References:
+1. https://www.blopig.com/blog/2022/02/how-to-turn-a-smiles-string-into-a-molecular-graph-for-pytorch-geometric/        
+
 
