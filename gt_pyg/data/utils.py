@@ -9,6 +9,11 @@ import torch
 from torch_geometric.data import Data
 from torch.utils.data import DataLoader
 
+
+__SMILES = 'CC'
+
+
+
 def one_hot_encoding(x, permitted_list):
     """
     Maps input elements x which are not in the permitted list to the last element
@@ -154,3 +159,10 @@ def get_tensor_data(x_smiles, y):
     return data_list
 
 
+def get_node_dim():
+    data = get_tensor_data(__SMILES, [0])[0]
+    return data.x.size(-1)
+
+def get_edge_dim():
+    data = get_tensor_data(__SMILES, [0])[0]
+    return data.edge_attr.size(-1)
