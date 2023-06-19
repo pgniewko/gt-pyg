@@ -28,24 +28,28 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dims, 
+    def __init__(self,
+                 input_dim,
+                 output_dim,
+                 hidden_dims,
                  num_hidden_layers=1,
-                 dropout=0.0, act='relu', 
+                 dropout=0.0,
+                 act='relu',
                  act_kwargs=None):
         super(MLP, self).__init__()
     
         if isinstance(hidden_dims, int):
             hidden_dims = [hidden_dims] * num_hidden_layers
         
+        assert len(hidden_dims) == num_hidden_layers
+
         hidden_dims = [input_dim] + hidden_dims
-        assert len(hidden_dims) - 1 == num_hidden_layers
-        
         layers = []
         
         for (i_dim, o_dim) in zip(hidden_dims[:-1], hidden_dims[1:]):
             layers.append(nn.Linear(i_dim, o_dim, bias=True))
             layers.append(activation_resolver(act, **(act_kwargs or {})))
-            if dropout > 0:
+            if dropout > 0.0:
                 layers.append(nn.Dropout(p=dropout))
                 
         layers.append(nn.Linear(hidden_dims[-1], output_dim, bias=True))
@@ -83,6 +87,8 @@ class GTConv(MessagePassing):
             elif norm.lower() in ['ln', 'layernorm', 'layer_norm']:
                 self.norm1e = nn.LayerNorm(edge_in_dim)
                 self.norm2e = nn.LayerNorm(edge_in_dim)
+            else:
+                raise ValueError
         else:
             self.WE = self.register_parameter('WE', None)
             self.WOe = self.register_parameter('WOe', None)
