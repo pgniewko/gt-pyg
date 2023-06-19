@@ -69,7 +69,7 @@ class GraphTransformerNet(nn.Module):
         self.mu_mlp = MLP(input_dim=num_aggrs * hidden_dim, output_dim=1,
                           hidden_dims=hidden_dim,
                           num_hidden_layers=1, dropout=0.0, act=act)
-        self.std_mlp = MLP(input_dim=num_aggrs * hidden_dim, output_dim=1,
+        self.lo_var_mlp = MLP(input_dim=num_aggrs * hidden_dim, output_dim=1,
                            hidden_dims=hidden_dim,
                            num_hidden_layers=1, dropout=0.0, act=act)
         
@@ -79,20 +79,27 @@ class GraphTransformerNet(nn.Module):
         
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.node_emb.weight)
-        nn.init.xavier_uniform_(self.edge_emb.weight)
+        if self.edge_emb is not None:
+            nn.init.xavier_uniform_(self.edge_emb.weight)
+        if self.pe_emb is not None:
+            nn.init.xavier_uniform_(self.pe_emb.weight)
             
             
-    def forward(self, x, edge_index, edge_attr, pe, batch, return_std=False):
-        x = self.node_emb(x.squeeze())
-        x = x + self.pe_emb(pe) # squezee?
-        edge_attr = self.edge_emb(edge_attr)
+    def forward(self, x, edge_index, edge_attr, pe, batch, zero_var=False):
+        x = self.node_emb(x)
+        if self.pe_emb is not None:
+            x = x + self.pe_emb(pe)
+        if self.edge_emb is not None:
+            edge_attr = self.edge_emb(edge_attr)
         
         for gt_layer in self.gt_layers:
             (x, edge_attr) = gt_layer(x, edge_index, edge_attr=edge_attr)
 
         x = self.global_pool(x, batch)
         mu = self.mu_mlp(x)
-        log_var = self.std_mlp(x)
+        log_var = self.log_var_mlp(x)
+        if zero_var:
+            log_var = torch.zeros_like(log_var)
         std = torch.exp(0.5 * log_var)
         
         if self.training:
@@ -105,5 +112,3 @@ class GraphTransformerNet(nn.Module):
         trainable_params = filter(lambda p: p.requires_grad, self.parameters())
         count = sum([p.numel() for p in trainable_params])
         return count
-
-

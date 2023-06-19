@@ -44,7 +44,6 @@ def get_train_valid_test_data(endpoint, min_num_atoms=6):
     return (train_data, valid_data, test_data)
 
 
-
 def one_hot_encoding(x, permitted_list):
     """
     Maps input elements x which are not in the permitted list to the last element
