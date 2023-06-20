@@ -12,10 +12,10 @@ DESCRIPTION
 INSTALL
 =======
 
-Recreate the conda environment:
+Create the conda environment:
     
 ```
-
+conda env create -f environment.yml
 ```
 
 Clone and install the software:
