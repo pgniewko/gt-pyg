@@ -223,7 +223,6 @@ def get_bond_features(bond, use_stereochemistry=True):
     return np.array(bond_feature_vector)
 
 
-# def create_pytorch_geometric_graph_data_list_from_smiles_and_labels(x_smiles, y):
 def get_tensor_data(x_smiles, y, pe=True, pe_dim=6):
     """
     Inputs:

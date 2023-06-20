@@ -1,5 +1,28 @@
-# gt-pyg
-Graph Transformer Network in PyG
+>Notice: This is research code that will not necessarily be maintained in the future.
+>The code is under development so make sure you are using the most recent version.
+>We welcome bug reports and PRs but make no guarantees about fixes or responses.
+
+DESCRIPTION
+==================================================
+```gt_pyg``` is an implementation of the Graph Transformer Network in PyG
+
+## References:
+1. https://www.blopig.com/blog/2022/02/how-to-turn-a-smiles-string-into-a-molecular-graph-for-pytorch-geometric/        
+
+INSTALL
+=======
+
+```
+git clone https://github.com/pgniewko/gt_pyg.git
+pip install .
+```
+
+USAGE
+=====
+
+### Therapeutics Data Commons
+Details and the leaderboard can be found on the TDC [website](https://tdcommons.ai/benchmark/admet_group/overview/)
+
 
 
 
@@ -10,7 +33,5 @@ Graph Transformer Network in PyG
 
 
 
-## References:
-1. https://www.blopig.com/blog/2022/02/how-to-turn-a-smiles-string-into-a-molecular-graph-for-pytorch-geometric/        
 
 
