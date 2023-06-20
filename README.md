@@ -6,14 +6,21 @@ DESCRIPTION
 ==================================================
 ```gt_pyg``` is an implementation of the Graph Transformer Network in PyG
 
-## References:
-1. https://www.blopig.com/blog/2022/02/how-to-turn-a-smiles-string-into-a-molecular-graph-for-pytorch-geometric/        
+<p align="center"><img src="./assets/gt_v0.5.pdf" width="400"></p>
+
 
 INSTALL
 =======
 
+Recreate the conda environment:
+    
 ```
-git clone https://github.com/pgniewko/gt_pyg.git
+
+```
+
+Clone and install the software:
+```
+git clone https://github.com/pgniewko/gt-pyg.git
 pip install .
 ```
 
@@ -33,5 +40,5 @@ Details and the leaderboard can be found on the TDC [website](https://tdcommons.
 
 
 
-
-
+## References:
+1. https://www.blopig.com/blog/2022/02/how-to-turn-a-smiles-string-into-a-molecular-graph-for-pytorch-geometric/        
