@@ -6,3 +6,5 @@ __MACOSX/
 .DS_Store
 ww-img
 *.tab
+build/
+gt_pyg.egg-info/
