@@ -78,22 +78,20 @@ def clean_df(tdc_df: pd.DataFrame, min_num_atoms: int = 6) -> pd.DataFrame:
     tdc_df = tdc_df.query("num_frags == 1").copy()
     fragments_removed = initial_length - len(tdc_df)
     tdc_df = tdc_df.query(f"num_atoms >= {min_num_atoms}").copy()
-    removed_cmpds = initial_length - len(tdc_df)
+    removed_cmpds = initial_length - len(tdc_df) + fragments_removed
 
     if removed_cmpds > 0 or fragments_removed > 0:
         logging.info(
             f"Removed {fragments_removed} compounds that have more than 1 fragment."
         )
         logging.info(
-            f"Removed {removed_cmpds} compounds that did not meet the criteria."
+            f"Removed {removed_cmpds} compounds that did not meet the size criteria."
         )
 
     return tdc_df
 
 
-def get_train_valid_test_data(
-    endpoint: str, min_num_atoms: int = 6
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def get_train_valid_test_data(endpoint: str, min_num_atoms: int = 6) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Retrieves and cleans the train, validation, and test data for a specific endpoint in the ADME dataset.
 
