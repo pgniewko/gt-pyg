@@ -6,7 +6,7 @@ DESCRIPTION
 ==================================================
 ```gt_pyg``` is an implementation of the Graph Transformer Network in PyG
 
-<p align="center"><img src="./assets/gt_v0.5.pdf" width="400"></p>
+<p align="center"><img src="./assets/gt_v0.5.png" width="400"></p>
 
 
 INSTALL
