@@ -17,7 +17,7 @@ class GTConv(MessagePassing):
         node_in_dim: int,
         hidden_dim: int,
         edge_in_dim: Optional[int] = None,
-        num_heads: int = 1,
+        num_heads: int = 8,
         dropout: float = 0.0,
         norm: str = "bn",
         act: str = "relu",
@@ -30,7 +30,7 @@ class GTConv(MessagePassing):
             hidden_dim (int): Dimensionality of the hidden representations.
             edge_in_dim (int, optional): Dimensionality of the input edge features.
                                          Default is None.
-            num_heads (int, optional): Number of attention heads. Default is 1.
+            num_heads (int, optional): Number of attention heads. Default is 8.
             dropout (float, optional): Dropout probability. Default is 0.0.
             norm (str, optional): Normalization type. Options: "bn" (BatchNorm), "ln" (LayerNorm).
                                   Default is "bn".
@@ -47,7 +47,6 @@ class GTConv(MessagePassing):
         self.WO = nn.Linear(hidden_dim, node_in_dim, bias=True)
 
         if edge_in_dim is not None:
-            assert node_in_dim == edge_in_dim
             self.WE = nn.Linear(edge_in_dim, hidden_dim, bias=True)
             self.WOe = nn.Linear(hidden_dim, edge_in_dim, bias=True)
             self.ffn_e = MLP(
@@ -111,6 +110,8 @@ class GTConv(MessagePassing):
 
     def forward(self, x, edge_index, edge_attr=None):
         x_ = x
+        edge_attr_ = edge_attr
+
         Q = self.WQ(x).view(-1, self.num_heads, self.hidden_dim // self.num_heads)
         K = self.WK(x).view(-1, self.num_heads, self.hidden_dim // self.num_heads)
         V = self.WV(x).view(-1, self.num_heads, self.hidden_dim // self.num_heads)
@@ -135,9 +136,8 @@ class GTConv(MessagePassing):
             out_eij = out_eij.view(-1, self.hidden_dim)
 
             # EDGES
-            out_eij_ = out_eij
             out_eij = self.dropout_layer(out_eij)
-            out_eij = self.WOe(out_eij) + out_eij_  # Residual connection
+            out_eij = self.WOe(out_eij) + edge_attr_  # Residual connection
             out_eij = self.norm1e(out_eij)
             # FFN-EDGES
             ffn_eij_in = out_eij
@@ -147,19 +147,15 @@ class GTConv(MessagePassing):
         return (out, out_eij)
 
     def message(self, Q_i, K_j, V_j, index, edge_attr=None):
-        if self.WE is not None:
+        if self.edge_in_dim is not None:
             assert edge_attr is not None
-            E = self.WE(edge_attr).view(
-                -1, self.num_heads, self.hidden_dim // self.num_heads
-            )
+            E = self.WE(edge_attr).view(-1, self.num_heads, self.hidden_dim // self.num_heads)
             K_j = E * K_j
 
         d_k = Q_i.size(-1)
         qijk = (Q_i * K_j).sum(dim=-1) / math.sqrt(d_k)
         self._eij = (Q_i * K_j) / math.sqrt(d_k)
-        alpha = softmax(
-            qijk, index
-        )  # Log-Sum-Exp trick used. No need for clipping (-5,5)
+        alpha = softmax(qijk, index)  # Log-Sum-Exp trick used. No need for clipping (-5,5)
 
         return alpha.view(-1, self.num_heads, 1) * V_j
 
