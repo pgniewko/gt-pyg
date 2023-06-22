@@ -40,23 +40,47 @@ def get_edge_dim() -> int:
     return data.edge_attr.size(-1)
 
 
-def clean_df(tdc_df: pd.DataFrame, min_num_atoms: int = 6) -> pd.DataFrame:
+def clean_df(tdc_df: pd.DataFrame, min_num_atoms: int = 0, use_largest_fragment=True, x_label='Drug', y_label='Y') -> pd.DataFrame:
     """
     Cleans a DataFrame containing chemical structures by removing rows that do not meet certain criteria.
 
     Args:
-        tdc_df (pandas.DataFrame): The input DataFrame containing chemical structures.
+        tdc_df (pd.DataFrame): The input DataFrame containing chemical structures.
         min_num_atoms (int, optional): The minimum number of atoms required for a structure to be considered valid.
-            Defaults to 6.
+            Set to 0 for no size-based filtering. Defaults to 0.
+        use_largest_fragment (bool, optional): Whether to use the largest fragment when cleaning the data.
+            Defaults to True.
+        x_label (str, optional): Label of the column to be used for X variable in the cleaned DataFrame.
+            Defaults to 'Drug'.
+        y_label (str, optional): Label of the column to be used for Y variable in the cleaned DataFrame.
+            Defaults to 'Y'.
 
     Returns:
-        pandas.DataFrame: A cleaned DataFrame with rows that satisfy the specified criteria.
+        pd.DataFrame: A cleaned DataFrame with rows that satisfy the specified criteria.
     """
 
     def count_fragments(mol):
         # Helper function to count the number of fragments in a molecule.
         frags = Chem.GetMolFrags(mol)
         return len(frags)
+
+    def get_largest_fragment(mol):
+        # Remove the counterions
+        mol = Chem.RemoveHs(mol)
+
+        # Get the disconnected fragments
+        fragments = Chem.GetMolFrags(mol, asMols=True)
+
+        # Calculate the number of heavy atoms in each fragment
+        num_atoms = [frag.GetNumHeavyAtoms() for frag in fragments]
+
+        # Identify the index of the largest fragment
+        largest_frag_index = num_atoms.index(max(num_atoms))
+
+        # Get the SMILES representation of the largest fragment
+        largest_frag_smiles = Chem.MolToSmiles(fragments[largest_frag_index])
+
+        return largest_frag_smiles
 
     def count_atoms(mol):
         # Helper function to count the number of atoms in a molecule.
@@ -71,34 +95,38 @@ def clean_df(tdc_df: pd.DataFrame, min_num_atoms: int = 6) -> pd.DataFrame:
 
     # Calculate the number of fragments and atoms for each molecule
     tdc_df["num_frags"] = tdc_df.mol.apply(count_fragments)
+    tdc_df["largest_fragment"] = tdc_df.mol.apply(get_largest_fragment)
     tdc_df["num_atoms"] = tdc_df.mol.apply(count_atoms)
 
     # Filter out rows with more than one fragment and fewer atoms than the specified minimum
     initial_length = len(tdc_df)
-    tdc_df = tdc_df.query("num_frags == 1").copy()
-    fragments_removed = initial_length - len(tdc_df)
-    tdc_df = tdc_df.query(f"num_atoms >= {min_num_atoms}").copy()
-    removed_cmpds = initial_length - len(tdc_df) + fragments_removed
+    if use_largest_fragment:
+        tdc_df[x_label] = tdc_df["largest_fragment"].to_list()
+        fragments_removed = 0
+    else:
+        tdc_df = tdc_df.query("num_frags == 1").copy()
+        fragments_removed = initial_length - len(tdc_df)
+        logging.info(f"Removed {fragments_removed} compounds that have more than 1 fragment.")
 
-    if removed_cmpds > 0 or fragments_removed > 0:
-        logging.info(
-            f"Removed {fragments_removed} compounds that have more than 1 fragment."
-        )
-        logging.info(
-            f"Removed {removed_cmpds} compounds that did not meet the size criteria."
-        )
+    if min_num_atoms > 0:
+        tdc_df = tdc_df.query(f"num_atoms >= {min_num_atoms}").copy()
+        removed_cmpds = initial_length - len(tdc_df) + fragments_removed
+        logging.info(f"Removed {removed_cmpds} compounds that did not meet the size criteria.")
 
+    tdc_df = tdc_df[[x_label, y_label]]
     return tdc_df
 
 
-def get_train_valid_test_data(endpoint: str, min_num_atoms: int = 6) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def get_train_valid_test_data(endpoint: str, min_num_atoms: int = 0, use_largest_fragment: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Retrieves and cleans the train, validation, and test data for a specific endpoint in the ADME dataset.
 
     Args:
         endpoint (str): The name of the endpoint in the ADME dataset.
         min_num_atoms (int, optional): The minimum number of atoms required for a structure to be considered valid.
-            Defaults to 6.
+            Set to 0 for no size-based filtering. Defaults to 0.
+        use_largest_fragment (bool, optional): Whether to use the largest fragment when cleaning the data.
+            Defaults to True.
 
     Returns:
         tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: A tuple containing cleaned train, validation, and test DataFrames.
@@ -108,11 +136,42 @@ def get_train_valid_test_data(endpoint: str, min_num_atoms: int = 6) -> Tuple[pd
     data = ADME(name=endpoint)
     splits = data.get_split()
 
-    train_data = clean_df(splits["train"], min_num_atoms)
-    valid_data = clean_df(splits["valid"], min_num_atoms)
-    test_data = clean_df(splits["test"], min_num_atoms)
+    train_data = clean_df(splits["train"], min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment)
+    valid_data = clean_df(splits["valid"], min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment)
+    test_data = clean_df(splits["test"], min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment)
 
     return (train_data, valid_data, test_data)
+
+
+def get_data_from_csv(filename: str, x_label: str, y_label: str, sep: str = ',', min_num_atoms: int = 0, use_largest_fragment: bool = True) -> pd.DataFrame:
+    """
+    Reads data from a CSV file and returns a cleaned DataFrame containing specified columns.
+
+    Parameters:
+        filename (str): Path to the CSV file.
+        x_label (str): Label of the column to be used as the X variable.
+        y_label (str): Label of the column to be used as the Y variable.
+        sep (str, optional): Separator used in the CSV file. Default is ','.
+        min_num_atoms (int, optional): The minimum number of atoms required for a structure to be considered valid.
+            Set to 0 for no size-based filtering. Defaults to 0.
+        use_largest_fragment (bool, optional): Whether to use the largest fragment when cleaning the data.
+            Defaults to True.
+
+    Returns:
+        pandas.DataFrame: A cleaned DataFrame containing only the specified X and Y columns.
+
+    Example:
+        data = get_data_from_csv('data.csv', 'X', 'Y')
+    """
+    df = pd.read_csv(filename, sep=sep)
+    df = df[[x_label, y_label]]
+
+    data = clean_df(df,
+                    min_num_atoms=min_num_atoms,
+                    use_largest_fragment=use_largest_fragment,
+                    x_label=x_label,
+                    y_label=y_label)
+    return data
 
 
 def one_hot_encoding(x: str, permitted_list: List[str]) -> List[int]:
@@ -161,8 +220,14 @@ def get_pe(mol: Chem.Mol, pe_dim: int = 6, normalized: bool = True) -> np.ndarra
     except:
         print(Chem.MolToSmiles(mol))
         raise
+
     vec = vec[:, np.argsort(val)]
-    return vec[:, 1:pe_dim + 1]
+    N = vec.shape[1]
+    M = pe_dim + 1
+    if N < M:
+        vec = np.pad(vec, ((0, 0), (0, M - N)), mode='constant')
+
+    return vec[:, 1:M]
 
 
 def get_atom_features(atom: Chem.Atom, use_chirality: bool = True, hydrogens_implicit: bool = True) -> np.ndarray:
