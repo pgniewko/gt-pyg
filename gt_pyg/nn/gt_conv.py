@@ -1,11 +1,12 @@
 # Standard
 import math
-from typing import Optional
+from typing import List, Optional
 
 # Third party
 from torch import nn
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+from torch_geometric.nn.aggr import MultiAggregation
 
 # GT-PyG
 from .mlp import MLP
@@ -21,6 +22,7 @@ class GTConv(MessagePassing):
         dropout: float = 0.0,
         norm: str = "bn",
         act: str = "relu",
+        aggregators: List[str] = ['sum'],
     ):
         """
         Graph Transformer Convolution (GTConv) module.
@@ -35,16 +37,21 @@ class GTConv(MessagePassing):
             norm (str, optional): Normalization type. Options: "bn" (BatchNorm), "ln" (LayerNorm).
                                   Default is "bn".
             act (str, optional): Activation function name. Default is "relu".
+            aggregators (List[str], optional): Aggregation methods for the messages aggregation.
+                                               Default is ["sum"].
         """
-        super(GTConv, self).__init__(node_dim=0, aggr="add")
+        super().__init__(node_dim=0, aggr=MultiAggregation(aggregators, mode="cat"))
 
         assert hidden_dim % num_heads == 0
         assert (edge_in_dim is None) or (edge_in_dim > 0)
 
+        self.aggregators = aggregators
+        self.num_aggrs = len(aggregators)
+
         self.WQ = nn.Linear(node_in_dim, hidden_dim, bias=True)
         self.WK = nn.Linear(node_in_dim, hidden_dim, bias=True)
         self.WV = nn.Linear(node_in_dim, hidden_dim, bias=True)
-        self.WO = nn.Linear(hidden_dim, node_in_dim, bias=True)
+        self.WO = nn.Linear(hidden_dim * self.num_aggrs, node_in_dim, bias=True)
 
         if edge_in_dim is not None:
             self.WE = nn.Linear(edge_in_dim, hidden_dim, bias=True)
@@ -117,7 +124,7 @@ class GTConv(MessagePassing):
         V = self.WV(x).view(-1, self.num_heads, self.hidden_dim // self.num_heads)
 
         out = self.propagate(edge_index, Q=Q, K=K, V=V, edge_attr=edge_attr, size=None)
-        out = out.view(-1, self.hidden_dim)
+        out = out.view(-1, self.hidden_dim * self.num_aggrs)
 
         # NODES
         out = self.dropout_layer(out)
@@ -160,7 +167,9 @@ class GTConv(MessagePassing):
         return alpha.view(-1, self.num_heads, 1) * V_j
 
     def __repr__(self) -> str:
+        aggrs = ','.join(self.aggregators)
         return (
             f"{self.__class__.__name__}({self.node_in_dim}, "
-            f"{self.hidden_dim}, heads={self.num_heads})"
+            f"{self.hidden_dim}, heads={self.num_heads}, "
+            f"aggrss: aggrs)"
         )

@@ -31,6 +31,7 @@ class GraphTransformerNet(nn.Module):
         norm: str = "bn",
         num_gt_layers: int = 4,
         num_heads: int = 8,
+        gt_aggregators: List[str] = ["sum"],
         aggregators: List[str] = ["sum"],
         act: str = "relu",
         dropout: float = 0.0,
@@ -49,6 +50,8 @@ class GraphTransformerNet(nn.Module):
             num_gt_layers (int, optional): Number of Graph Transformer layers.
                                            Default is 4.
             num_heads (int, optional): Number of attention heads. Default is 8.
+            gt_aggregators (List[str], optional): Aggregation methods for the messages aggregation.
+                                               Default is ["sum"].
             aggregators (List[str], optional): Aggregation methods for global pooling.
                                                Default is ["sum"].
             act (str, optional): Activation function.
@@ -81,6 +84,7 @@ class GraphTransformerNet(nn.Module):
                     act=act,
                     dropout=dropout,
                     norm="bn",
+                    aggregators=gt_aggregators,
                 )
             )
 
@@ -154,8 +158,9 @@ class GraphTransformerNet(nn.Module):
         mu = self.mu_mlp(x)
         log_var = self.log_var_mlp(x)
         if zero_var:
-            log_var = torch.zeros_like(log_var)
-        std = torch.exp(0.5 * log_var)
+            std = torch.zeros_like(log_var)
+        else:
+            std = torch.exp(0.5 * log_var)
 
         if self.training:
             eps = torch.randn_like(std)
