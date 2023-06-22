@@ -13,17 +13,19 @@ This sketch provides an overview of the Graph Transformer Architecture (Dwivedi,
 INSTALL
 =======
 
-Create the conda environment:
-    
-```
-conda env create -f environment.yml
-```
-
 Clone and install the software:
 ```
 git clone https://github.com/pgniewko/gt-pyg.git
 pip install .
 ```
+
+Create and activate the conda environment:
+    
+```
+conda env create -f environment.yml
+conda activate gt
+```
+
 
 USAGE
 =====
@@ -68,7 +70,7 @@ IMPLEMENTATION NOTES
 
 2. Some implementation techniques are borrowed from the [TransformerConv](https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/conv/transformer_conv.py) module in the PyTorch-Geometric codebase.
 
-3. To convert SMILES into a tensor code, one option is to utilize the [from_smiles](https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.from_smiles) method. However, the current featurization approach lacks flexibility, as it necessitates the creation of multiple embeddings, which are then summed instead of employing a single Linear layer.
+3. To convert SMILES into a tensor code, one option is to utilize the [from_smiles](https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.from_smiles) method. However, the current featurization approach lacks flexibility; It necessitates the creation of multiple embeddings, which are then summed instead of employing a single Linear layer.
 
 4. To maintain simplicity, we forgo creating a separate DataSet object since we are working with small datasets. Instead, we pass a list of Data objects to the DataLoader, as explained in the [documentation](https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_dataset.html).
 
