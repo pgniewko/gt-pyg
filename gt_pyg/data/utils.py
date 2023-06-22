@@ -91,7 +91,7 @@ def clean_df(tdc_df: pd.DataFrame, min_num_atoms: int = 0, use_largest_fragment=
         rdBase.DisableLog(log_level)
 
     # Convert SMILES strings to RDKit Mol objects
-    tdc_df["mol"] = tdc_df.Drug.apply(Chem.MolFromSmiles)
+    tdc_df["mol"] = tdc_df[x_label].apply(Chem.MolFromSmiles)
 
     # Calculate the number of fragments and atoms for each molecule
     tdc_df["num_frags"] = tdc_df.mol.apply(count_fragments)
