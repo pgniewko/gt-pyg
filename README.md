@@ -80,7 +80,7 @@ REFERENCES
 
 COPYRIGHT NOTICE
 ================
-Copyright (C) 2023-, Pawel Gniewek
-Email: gniewko.pablo@gmail.com
-All rights reserved.
-License: MIT
+Copyright (C) 2023-, Pawel Gniewek                 
+Email: gniewko.pablo@gmail.com                          
+License: MIT                      
+All rights reserved.                     
