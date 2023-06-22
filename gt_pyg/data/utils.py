@@ -206,15 +206,15 @@ def get_atom_features(atom: Chem.Atom, use_chirality: bool = True, hydrogens_imp
 
     is_aromatic_enc = [int(atom.GetIsAromatic())]
 
-    atomic_mass_scaled = [float((atom.GetMass() - 10.812) / 116.092)]
-
-    vdw_radius_scaled = [
-        float((Chem.GetPeriodicTable().GetRvdw(atom.GetAtomicNum()) - 1.5) / 0.6)
-    ]
-
-    covalent_radius_scaled = [
-        float((Chem.GetPeriodicTable().GetRcovalent(atom.GetAtomicNum()) - 0.64) / 0.76)
-    ]
+#    atomic_mass_scaled = [float((atom.GetMass() - 10.812) / 116.092)]
+#
+#    vdw_radius_scaled = [
+#        float((Chem.GetPeriodicTable().GetRvdw(atom.GetAtomicNum()) - 1.5) / 0.6)
+#    ]
+#
+#    covalent_radius_scaled = [
+#        float((Chem.GetPeriodicTable().GetRcovalent(atom.GetAtomicNum()) - 0.64) / 0.76)
+#    ]
 
     atom_feature_vector = (
         atom_type_enc
@@ -223,9 +223,9 @@ def get_atom_features(atom: Chem.Atom, use_chirality: bool = True, hydrogens_imp
         + hybridisation_type_enc
         + is_in_a_ring_enc
         + is_aromatic_enc
-        + atomic_mass_scaled
-        + vdw_radius_scaled
-        + covalent_radius_scaled
+#        + atomic_mass_scaled
+#        + vdw_radius_scaled
+#        + covalent_radius_scaled
     )
 
     if use_chirality:
