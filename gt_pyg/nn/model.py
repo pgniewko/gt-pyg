@@ -134,7 +134,8 @@ class GraphTransformerNet(nn.Module):
             edge_attr (Tensor): Edge features.
             pe (Tensor): Positional encoding.
             batch (Batch): Batch indices.
-            zero_var (bool, optional): Flag to zero out the log variance. Default is False.
+            zero_var (bool, optional): Flag to zero out the log variance.
+                                       Default is False.
 
         Returns:
             Tensor: The output of the forward pass.
@@ -147,7 +148,7 @@ class GraphTransformerNet(nn.Module):
             edge_attr = self.edge_emb(edge_attr)
 
         for gt_layer in self.gt_layers:
-            (x, edge_attr) = gt_layer(x, edge_index, edge_attr=edge_attr)
+            (x, edge_attr) = gt_layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
         x = self.global_pool(x, batch)
         mu = self.mu_mlp(x)
