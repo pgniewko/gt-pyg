@@ -61,6 +61,16 @@ gt(x=x, edge_index=edge_index, edge_attr=edge_attr)
 The complete example, which demonstrates the usage of the GTConv layer in a model and training a regression model for the ADME task in the Therapeutics Data Commons, can be found in this [notebook](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-TDC-ADME.ipynb).
 
 
+The code works with custom datasets. Let's assume we have a file called `solubility.csv` with two columns: `SMILES` and `logS`. We can prepare a training `DataLoader` object with the following code.
+```python
+fn = 'solubility.csv'
+x_label='SMILES'
+y_label='logS'
+dataset = get_data_from_csv(fn, x_label='SMILES', y_label='logS')
+tr_dataset = get_tensor_data(dataset[x_label], dataset[y_label].to_list(), pe_dim=6)
+train_loader = DataLoader(tr_dataset, batch_size=256)
+```
+
 IMPLEMENTATION NOTES
 ====================
 
