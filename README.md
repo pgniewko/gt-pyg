@@ -49,11 +49,14 @@ edge_index = torch.randint(high=num_nodes, size=(2, num_edges))
 # Generate random edge attributes (optional)
 edge_attr = torch.randn(num_edges, num_edge_features)
 
-gt = GTConv(node_in_dim=num_node_features, hidden_dim=15, edge_in_dim=num_edge_features, num_heads=3)
+gt = GTConv(node_in_dim=num_node_features, 
+            edge_in_dim=num_edge_features,
+            hidden_dim=15, 
+            num_heads=3)
 gt(x=x, edge_index=edge_index, edge_attr=edge_attr)
 ```
 
-The complete example, which demonstrates the usage of the GTConv layer in a model and training a regression model for the ADME task in the Therapeutics Data Commons, can be found in this [resource](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-TDC-ADME.ipynb).
+The complete example, which demonstrates the usage of the GTConv layer in a model and training a regression model for the ADME task in the Therapeutics Data Commons, can be found in this [notebook](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-TDC-ADME.ipynb).
 
 
 IMPLEMENTATION NOTES
