@@ -171,5 +171,5 @@ class GTConv(MessagePassing):
         return (
             f"{self.__class__.__name__}({self.node_in_dim}, "
             f"{self.hidden_dim}, heads={self.num_heads}, "
-            f"aggrss: {aggrs})"
+            f"aggrs: {aggrs})"
         )
