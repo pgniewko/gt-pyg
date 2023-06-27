@@ -62,14 +62,14 @@ class GraphTransformerNet(nn.Module):
 
         super(GraphTransformerNet, self).__init__()
 
-        self.node_emb = nn.Linear(node_dim_in, hidden_dim)
+        self.node_emb = nn.Linear(node_dim_in, hidden_dim, bias=False)
         if edge_dim_in:
-            self.edge_emb = nn.Linear(edge_dim_in, hidden_dim)
+            self.edge_emb = nn.Linear(edge_dim_in, hidden_dim, bias=False)
         else:
             self.edge_emb = self.register_parameter("edge_emb", None)
 
         if pe_in_dim:
-            self.pe_emb = nn.Linear(pe_in_dim, hidden_dim)
+            self.pe_emb = nn.Linear(pe_in_dim, hidden_dim, bias=False)
         else:
             self.pe_emb = self.register_parameter("pe_emb", None)
 
