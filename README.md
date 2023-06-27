@@ -7,8 +7,7 @@ DESCRIPTION
 ```gt_pyg``` is an implementation of the Graph Transformer Architecture in [Pytorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/).
 
 <p align="center"><img src="./assets/gt_v0.5.png" width="600"></p>
-This sketch provides an overview of the Graph Transformer Architecture (Dwivedi, Bresson, 2021)
-
+This sketch provides an overview of the Graph Transformer Architecture (Dwivedi, Bresson, 2021). In a nutshell, the model is implementing a dot product self-attention network with the `softmask` function (`softmask` is a `softmax` applied only over the non-zero elements of the `(A+I)` matrix).                
 
 INSTALL
 =======
