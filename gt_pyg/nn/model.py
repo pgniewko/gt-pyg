@@ -112,7 +112,11 @@ class GraphTransformerNet(nn.Module):
 
     def reset_parameters(self):
         """
-        Reset the parameters of the model using Xavier uniform initialization.
+        Reset the embedding parameters of the model using Xavier uniform initialization.
+
+        Note: The input and the output of the embedding layers does not pass through the activation layer,
+              so the variance estimation differs by a factor of two from the default
+              kaiming_uniform initialization.
         """
         nn.init.xavier_uniform_(self.node_emb.weight)
         if self.edge_emb is not None:
