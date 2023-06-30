@@ -92,7 +92,8 @@ REFERENCES
 1. [A Generalization of Transformer Networks to Graphs](https://arxiv.org/abs/2012.09699)
 2. [What Uncertainties Do We Need in Bayesian Deep Learning for Computer Vision?](https://arxiv.org/abs/1703.04977)
 3. [Therapeutics Data Commons](https://arxiv.org/abs/2102.09548)
-
+3. [WeightWatcher YouTube Video](https://www.youtube.com/watch?v=Tnafo6JVoJs&ab_channel=SanFranciscoBayACM)
+5. [TorchMetrics](https://sebastianraschka.com/blog/2022/torchmetrics.html)
 
 COPYRIGHT NOTICE
 ================
