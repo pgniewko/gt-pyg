@@ -2,7 +2,7 @@
 import weightwatcher as ww
 
 
-def get_ww_statistic(model, statistic="alpha", fit="PL"):
+def get_ww_statistic(model, statistic="alpha"):
     assert statistic in [
         "log_norm",
         "alpha",
@@ -12,20 +12,20 @@ def get_ww_statistic(model, statistic="alpha", fit="PL"):
         "stable_rank",
     ]
     watcher = ww.WeightWatcher(model=model)
-    details = watcher.analyze(plot=False, fit=fit)
+    details = watcher.analyze(plot=False)
     summary = watcher.get_summary(details)
     return summary[statistic]
 
 
-def ww_active_layer_idx(model, fit="TPL"):
+def ww_active_layer_idx(model):
     watcher = ww.WeightWatcher(model=model)
-    details = watcher.analyze(plot=False, fit=fit)
+    details = watcher.analyze(plot=False)
     return details["layer_id"].to_list()
 
 
-def ww_active_layer_alpha(model, fit="TPL"):
+def ww_active_layer_alpha(model):
     watcher = ww.WeightWatcher(model=model)
-    details = watcher.analyze(plot=False, fit=fit)
+    details = watcher.analyze(plot=False)
     return details["alpha"].to_list()
 
 
