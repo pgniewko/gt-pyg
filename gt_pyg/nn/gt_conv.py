@@ -107,6 +107,11 @@ class GTConv(MessagePassing):
         self.reset_parameters()
 
     def reset_parameters(self):
+        """
+        Note: The output of the Q-K-V layers does not pass through the activation layer (as opposed to the input),
+              so the variance estimation should differ by a factor of two from the default
+              kaiming_uniform initialization.
+        """
         nn.init.xavier_uniform_(self.WQ.weight)
         nn.init.xavier_uniform_(self.WK.weight)
         nn.init.xavier_uniform_(self.WV.weight)
@@ -171,5 +176,5 @@ class GTConv(MessagePassing):
         return (
             f"{self.__class__.__name__}({self.node_in_dim}, "
             f"{self.hidden_dim}, heads={self.num_heads}, "
-            f"aggrss: {aggrs})"
+            f"aggrs: {aggrs})"
         )

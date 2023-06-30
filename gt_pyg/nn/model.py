@@ -62,14 +62,14 @@ class GraphTransformerNet(nn.Module):
 
         super(GraphTransformerNet, self).__init__()
 
-        self.node_emb = nn.Linear(node_dim_in, hidden_dim)
+        self.node_emb = nn.Linear(node_dim_in, hidden_dim, bias=False)
         if edge_dim_in:
-            self.edge_emb = nn.Linear(edge_dim_in, hidden_dim)
+            self.edge_emb = nn.Linear(edge_dim_in, hidden_dim, bias=False)
         else:
             self.edge_emb = self.register_parameter("edge_emb", None)
 
         if pe_in_dim:
-            self.pe_emb = nn.Linear(pe_in_dim, hidden_dim)
+            self.pe_emb = nn.Linear(pe_in_dim, hidden_dim, bias=False)
         else:
             self.pe_emb = self.register_parameter("pe_emb", None)
 
@@ -112,7 +112,11 @@ class GraphTransformerNet(nn.Module):
 
     def reset_parameters(self):
         """
-        Reset the parameters of the model using Xavier uniform initialization.
+        Reset the embedding parameters of the model using Xavier uniform initialization.
+
+        Note: The input and the output of the embedding layers does not pass through the activation layer,
+              so the variance estimation differs by a factor of two from the default
+              kaiming_uniform initialization.
         """
         nn.init.xavier_uniform_(self.node_emb.weight)
         if self.edge_emb is not None:
