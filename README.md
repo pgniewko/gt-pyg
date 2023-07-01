@@ -71,6 +71,15 @@ tr_dataset = get_tensor_data(dataset[x_label], dataset[y_label].to_list(), pe_di
 train_loader = DataLoader(tr_dataset, batch_size=256)
 ```
 
+WEIGHT WATCHER 
+==============
+The main idea originates from the [Weight Watcher lecture](https://www.youtube.com/watch?v=Tnafo6JVoJs&ab_channel=SanFranciscoBayACM), which suggests using per-layer alpha exponents to control the training process. The premise is that if the per-layer alphas fall within the range of `[2, 6]`, the network is well-trained, indicating that the deep neural network (DNN) has successfully captured long-range, scale-invariant correlations between the neural network parameters, input data, and the output labels.
+
+The idea developed here is rather simple: whenever a layer's `alpha` is within the desired range, we decrease the learning rate to effectively "capture" the weights in this spectral range. Conversely, when the `alpha` falls outside of this range, we increase the learning rate so that the layer's weights are modified more rapidly.
+
+We have empirically [demonstrated](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-WW.ipynb) that this simple procedure indeed leads to capturing the spectral exponents of the layers within the desired range. It is hypothesized that networks regularized in this way exhibit better generalization capabilities.
+
+
 IMPLEMENTATION NOTES
 ====================
 
@@ -84,7 +93,9 @@ IMPLEMENTATION NOTES
 
 4. To maintain simplicity, we forgo creating a separate DataSet object since we are working with small datasets. Instead, we pass a list of Data objects to the DataLoader, as explained in the [documentation](https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_dataset.html).
 
-5. The compound cleaning procedure drew inspiration from Pat Walter's [blog-post](https://practicalcheminformatics.blogspot.com/2023/06/getting-real-with-molecular-property.html).
+5. The compound cleaning procedure drew inspiration from Pat Walter's [blog-post](https://practicalcheminformatics.blogspot.com/2023/06/getting-real-with-molecular-property.html).             
+
+6. The test loss is calculated using [TorchMetrics](https://sebastianraschka.com/blog/2022/torchmetrics.html) for convenience.       
 
 
 REFERENCES
@@ -92,8 +103,7 @@ REFERENCES
 1. [A Generalization of Transformer Networks to Graphs](https://arxiv.org/abs/2012.09699)
 2. [What Uncertainties Do We Need in Bayesian Deep Learning for Computer Vision?](https://arxiv.org/abs/1703.04977)
 3. [Therapeutics Data Commons](https://arxiv.org/abs/2102.09548)
-3. [WeightWatcher YouTube Video](https://www.youtube.com/watch?v=Tnafo6JVoJs&ab_channel=SanFranciscoBayACM)
-5. [TorchMetrics](https://sebastianraschka.com/blog/2022/torchmetrics.html)
+4. [WeightWatcher](https://weightwatcher.ai/)
 
 COPYRIGHT NOTICE
 ================
