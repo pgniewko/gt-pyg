@@ -75,7 +75,7 @@ WEIGHT WATCHER
 ==============
 The main idea originates from the [Weight Watcher lecture](https://www.youtube.com/watch?v=Tnafo6JVoJs&ab_channel=SanFranciscoBayACM), which suggests using per-layer alpha exponents to control the training process. The premise is that if the per-layer alphas fall within the range of `[2, 6]`, the network is well-trained, indicating that the deep neural network (DNN) has successfully captured long-range, scale-invariant correlations between the neural network parameters, input data, and the output labels.
 
-The idea developed here is rather simple: whenever a layer's `alpha` is within the desired range, we decrease the learning rate to effectively "capture" the weights in this spectral range. Conversely, when the `alpha` falls outside of this range, we increase the learning rate so that the layer's weights are modified more rapidly.
+The idea [developed](https://github.com/pgniewko/gt-pyg/blob/8dbb7bc684f84e0692bb8db14fc33c6de7ffdc18/gt_pyg/util/ww_utils.py#L61) here is rather simple: whenever a layer's `alpha` is within the desired range, we decrease the learning rate to effectively "capture" the weights in this spectral range. Conversely, when the `alpha` falls outside of this range, we increase the learning rate so that the layer's weights are modified more rapidly.
 
 We have empirically [demonstrated](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-WW.ipynb) that this simple procedure indeed leads to capturing the spectral exponents of the layers within the desired range. It is hypothesized that networks regularized in this way exhibit better generalization capabilities.
 
