@@ -102,7 +102,7 @@ IMPLEMENTATION NOTES
 
 ## Todo
 
-- [ ] Investigate the performance of post-normalization versus pre-normalization.                   
+- [ ] Investigate the performance of post-normalization versus pre-normalization. Bear in mind that the optimal order setup of the Transformed architecture may intimately depend on the details of the implementation, such as hyperparameters.For more details, please refer to [Narang et al.](https://arxiv.org/abs/2102.11972).                  
 
 
 REFERENCES
