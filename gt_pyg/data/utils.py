@@ -143,6 +143,55 @@ def get_train_valid_test_data(endpoint: str, min_num_atoms: int = 0, use_largest
     return (train_data, valid_data, test_data)
 
 
+def get_molecule_ace_datasets(
+    dataset: str,
+    training_fraction: float = 1.0,
+    valid_fraction: float = 0.0,
+    seed: int = 42,
+    min_num_atoms: int = 0,
+    use_largest_fragment: bool = True
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Retrieve molecule ACE datasets.
+
+    Args:
+        dataset (str): Name of the dataset.
+        training_fraction (float, optional): Fraction of data to use for training. Defaults to 1.0.
+        valid_fraction (float, optional): Fraction of data to use for validation. Defaults to 0.0.
+        seed (int, optional): Random seed for shuffling. Defaults to 42.
+        min_num_atoms (int, optional): Minimum number of atoms required for a molecule to be included. Defaults to 0.
+        use_largest_fragment (bool, optional): Whether to use the largest fragment of a molecule. Defaults to True.
+
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: A tuple containing train, validation, and test datasets as pandas DataFrames.
+    """
+    try:
+        from MoleculeACE import Data
+    except ImportError:
+        logging.info('Importing MoleculeACE failed')
+        raise
+
+    data = Data(dataset)
+    df_train_tmp = pd.DataFrame({'SMILES': data.smiles_train, 'Y': data.y_train})
+    df_test = pd.DataFrame({'SMILES': data.smiles_test, 'Y': data.y_test})
+
+    shuffled_df = df_train_tmp.sample(frac=1, random_state=seed)
+
+    ratio = training_fraction / (training_fraction + valid_fraction)
+    # Calculate the split index based on the ratio
+    split_index = int(ratio * len(shuffled_df))
+
+    # Split the shuffled DataFrame into two separate DataFrames
+    df_train = shuffled_df.iloc[:split_index]
+    df_valid = shuffled_df.iloc[split_index:]
+
+    train_data = clean_df(df_train, min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment, x_label="SMILES")
+    valid_data = clean_df(df_valid, min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment, x_label="SMILES")
+    test_data = clean_df(df_test, min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment, x_label="SMILES")
+
+    return (train_data, valid_data, test_data)
+
+
 def get_data_from_csv(filename: str, x_label: str, y_label: str, sep: str = ',', min_num_atoms: int = 0, use_largest_fragment: bool = True) -> pd.DataFrame:
     """
     Reads data from a CSV file and returns a cleaned DataFrame containing specified columns.
