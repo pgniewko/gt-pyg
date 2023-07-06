@@ -80,6 +80,11 @@ The idea [developed](https://github.com/pgniewko/gt-pyg/blob/8dbb7bc684f84e0692b
 We have empirically [demonstrated](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-WW.ipynb) that this simple procedure indeed leads to capturing the spectral exponents of the layers within the desired range. It is hypothesized that networks regularized in this way exhibit better generalization capabilities.
 
 
+MoleculeACE
+===========
+The repository also contains a notebook and an example of how to run the (in)famous MoleculeACE benchmark. You can find it [here](). Enjoy!
+    
+
 IMPLEMENTATION NOTES
 ====================
 
