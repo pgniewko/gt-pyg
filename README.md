@@ -82,8 +82,8 @@ We have empirically [demonstrated](https://github.com/pgniewko/gt-pyg/blob/main/
 
 MoleculeACE
 ===========
-The repository also contains a notebook and an example of how to run the (in)famous MoleculeACE benchmark. You can find it [here](). Enjoy!
-    
+The repository also contains a notebook and an example of how to run the (in)famous MoleculeACE benchmark. You can find it [here](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-MoleculeACE.ipynb). Enjoy!
+
 
 IMPLEMENTATION NOTES
 ====================
