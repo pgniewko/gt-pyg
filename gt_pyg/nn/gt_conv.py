@@ -48,14 +48,14 @@ class GTConv(MessagePassing):
         self.aggregators = aggregators
         self.num_aggrs = len(aggregators)
 
-        self.WQ = nn.Linear(node_in_dim, hidden_dim, bias=True)
-        self.WK = nn.Linear(node_in_dim, hidden_dim, bias=True)
-        self.WV = nn.Linear(node_in_dim, hidden_dim, bias=True)
-        self.WO = nn.Linear(hidden_dim * self.num_aggrs, node_in_dim, bias=True)
+        self.WQ = nn.Linear(node_in_dim, hidden_dim, bias=False) # True)
+        self.WK = nn.Linear(node_in_dim, hidden_dim, bias=False) # True)
+        self.WV = nn.Linear(node_in_dim, hidden_dim, bias=False) # True)
+        self.WO = nn.Linear(hidden_dim * self.num_aggrs, node_in_dim, bias=False) # True)
 
         if edge_in_dim is not None:
-            self.WE = nn.Linear(edge_in_dim, hidden_dim, bias=True)
-            self.WOe = nn.Linear(hidden_dim, edge_in_dim, bias=True)
+            self.WE = nn.Linear(edge_in_dim, hidden_dim, bias=False) # True)
+            self.WOe = nn.Linear(hidden_dim, edge_in_dim, bias=False) # True)
             self.ffn_e = MLP(
                 input_dim=edge_in_dim,
                 output_dim=edge_in_dim,
