@@ -29,6 +29,7 @@ class GraphTransformerNet(nn.Module):
         pe_in_dim: Optional[int] = None,
         hidden_dim: int = 128,
         norm: str = "bn",
+        gate=False,
         num_gt_layers: int = 4,
         num_heads: int = 8,
         gt_aggregators: List[str] = ["sum"],
@@ -51,7 +52,7 @@ class GraphTransformerNet(nn.Module):
                                            Default is 4.
             num_heads (int, optional): Number of attention heads. Default is 8.
             gt_aggregators (List[str], optional): Aggregation methods for the messages aggregation.
-                                               Default is ["sum"].
+                                           Default is ["sum"].
             aggregators (List[str], optional): Aggregation methods for global pooling.
                                                Default is ["sum"].
             act (str, optional): Activation function.
@@ -84,6 +85,7 @@ class GraphTransformerNet(nn.Module):
                     act=act,
                     dropout=dropout,
                     norm="bn",
+                    gate=gate,
                     aggregators=gt_aggregators,
                 )
             )
