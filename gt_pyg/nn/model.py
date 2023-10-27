@@ -15,11 +15,11 @@ from .mlp import MLP
 
 class GraphTransformerNet(nn.Module):
     """
-        Graph Transformer Network.
+    Graph Transformer Network.
 
-        Reference:
-          1. A Generalization of Transformer Networks to Graphs
-             https://arxiv.org/abs/2012.09699
+    Reference:
+      1. A Generalization of Transformer Networks to Graphs
+         https://arxiv.org/abs/2012.09699
     """
 
     def __init__(
@@ -29,6 +29,8 @@ class GraphTransformerNet(nn.Module):
         pe_in_dim: Optional[int] = None,
         hidden_dim: int = 128,
         norm: str = "bn",
+        gate=False,
+        qkv_bias=False,
         num_gt_layers: int = 4,
         num_heads: int = 8,
         gt_aggregators: List[str] = ["sum"],
@@ -45,13 +47,17 @@ class GraphTransformerNet(nn.Module):
                                        Default is None.
             hidden_dim (int, optional): Dimension of hidden layers.
                                         Default is 128.
+            gate (bool, optional): Use a gate attantion mechanism.
+                                   Default is False
+            qkv_bias (bool, optional): Bias in the attention mechanism.
+                                       Default is False
             norm (str, optional): Normalization method.
                                   Default is "bn" (batch norm).
             num_gt_layers (int, optional): Number of Graph Transformer layers.
                                            Default is 4.
             num_heads (int, optional): Number of attention heads. Default is 8.
             gt_aggregators (List[str], optional): Aggregation methods for the messages aggregation.
-                                               Default is ["sum"].
+                                           Default is ["sum"].
             aggregators (List[str], optional): Aggregation methods for global pooling.
                                                Default is ["sum"].
             act (str, optional): Activation function.
@@ -84,6 +90,8 @@ class GraphTransformerNet(nn.Module):
                     act=act,
                     dropout=dropout,
                     norm="bn",
+                    gate=gate,
+                    qkv_bias=qkv_bias,
                     aggregators=gt_aggregators,
                 )
             )

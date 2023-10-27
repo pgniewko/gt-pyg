@@ -10,6 +10,10 @@ DESCRIPTION
 
 This sketch provides an overview of the Graph Transformer Architecture (Dwivedi, Bresson, 2021). In a nutshell, the model is implementing a dot product self-attention network with the `softmask` function (`softmask` is a `softmax` applied only over the non-zero elements of the `(A+I)` matrix).                
 
+<p align="center"><img src="./assets/gated_gnn.png" width="600"></p>
+
+This sketch is an overview of the gating mechanism used in the GT model (Chen, et al., 2023, Bioinformatics).
+
 INSTALL
 =======
 
@@ -91,7 +95,9 @@ IMPLEMENTATION NOTES
 1. The code aims to faithfully replicate the original [GTConv layer](https://github.com/xbresson/CS6208_2023/blob/main/codes/labs_lecture07/03_graph_transformers_regression_exercise.ipynb) as closely as possible.                      
   * There is no need for clipping in the softmax function since the softmax procedure in PyG employs the Log-Sum-Exp trick, effectively mitigating any potential risk of overflow.                    
   * Additional details on implementing message passing layers in `pytorch-geometric` can be found on the [pyg website](https://pytorch-geometric.readthedocs.io/en/latest/notes/create_gnn.html).              
-  * In the original paper, only the `sum` is used for message aggregation. Drawing inspiration from the [PNA model](https://arxiv.org/abs/2004.05718), the user can utilize a set of aggregators.                 
+  * In the original paper, only the `sum` is used for message aggregation. Drawing inspiration from the [PNA model](https://arxiv.org/abs/2004.05718), the user can utilize a set of aggregators.                
+  * The current implementation adds a gating mechanism (after Chen et al. 2023, Bioinformatics) and sets biases in the attention mechanism to `False` (after Jumper et al, 2021, Science). To reproduce the original GT paper, set `qkv_bias=True`, and `gate=False`.                   
+
 2. Some implementation techniques are borrowed from the [TransformerConv](https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/conv/transformer_conv.py) module in the PyTorch-Geometric codebase.
 
 3. To convert SMILES into a tensor code, one option is to utilize the [from_smiles](https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.from_smiles) method. However, the current featurization approach lacks flexibility; It necessitates the creation of multiple embeddings, which are then summed instead of employing a single Linear layer.
@@ -104,17 +110,13 @@ IMPLEMENTATION NOTES
 
 7. **Note**: The order in which batch/layer normalization is executed is a topic of debate in the Deep Learning literature. The current implementation in this work utilizes the Post-Normalization Transformer layer, as opposed to Pre-Normalization. Although it is claimed that pre-normalization works better, this assertion has not been verified in this particular study. For additional references, please refer to the [Graphorer](https://arxiv.org/abs/2106.05234) paper or a more comprehensive study conducted by [Xiong et al.](https://arxiv.org/abs/2002.04745).                  
 
-## Todo
-
-- [ ] Investigate the performance of post-normalization versus pre-normalization. Bear in mind that the optimal order setup of the Transformed architecture may intimately depend on the details of the implementation, such as hyperparameters.For more details, please refer to [Narang et al.](https://arxiv.org/abs/2102.11972).                  
-
-
 REFERENCES
 ==========
 1. [A Generalization of Transformer Networks to Graphs](https://arxiv.org/abs/2012.09699)
-2. [What Uncertainties Do We Need in Bayesian Deep Learning for Computer Vision?](https://arxiv.org/abs/1703.04977)
-3. [Therapeutics Data Commons](https://arxiv.org/abs/2102.09548)
-4. [WeightWatcher](https://weightwatcher.ai/)
+2. [A gated graph transformer for protein complex structure quality assessment and its performance in CASP15](https://academic.oup.com/bioinformatics/article/39/Supplement_1/i308/7210460)
+3. [What Uncertainties Do We Need in Bayesian Deep Learning for Computer Vision?](https://arxiv.org/abs/1703.04977)
+4. [Therapeutics Data Commons](https://arxiv.org/abs/2102.09548)
+5. [WeightWatcher](https://weightwatcher.ai/)
 
 COPYRIGHT NOTICE
 ================

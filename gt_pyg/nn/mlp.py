@@ -40,14 +40,13 @@ class MLP(nn.Module):
         hidden_dims = [input_dim] + hidden_dims
         layers = []
 
-        for (i_dim, o_dim) in zip(hidden_dims[:-1], hidden_dims[1:]):
+        for i_dim, o_dim in zip(hidden_dims[:-1], hidden_dims[1:]):
             layers.append(nn.Linear(i_dim, o_dim, bias=True))
             layers.append(activation_resolver(act, **(act_kwargs or {})))
             if dropout > 0.0:
                 layers.append(nn.Dropout(p=dropout))
 
         layers.append(nn.Linear(hidden_dims[-1], output_dim, bias=True))
-
         self.mlp = nn.Sequential(*layers)
 
     def forward(self, x: Tensor) -> Tensor:
