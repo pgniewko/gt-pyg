@@ -109,6 +109,7 @@ IMPLEMENTATION NOTES
 6. The test loss is calculated using [TorchMetrics](https://sebastianraschka.com/blog/2022/torchmetrics.html) for convenience.       
 
 7. **Note**: The order in which batch/layer normalization is executed is a topic of debate in the Deep Learning literature. The current implementation in this work utilizes the Post-Normalization Transformer layer, as opposed to Pre-Normalization. Although it is claimed that pre-normalization works better, this assertion has not been verified in this particular study. For additional references, please refer to the [Graphorer](https://arxiv.org/abs/2106.05234) paper or a more comprehensive study conducted by [Xiong et al.](https://arxiv.org/abs/2002.04745).                  
+>>>>>>> main
 
 REFERENCES
 ==========
