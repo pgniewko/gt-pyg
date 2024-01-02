@@ -89,6 +89,12 @@ MoleculeACE
 The repository also contains a notebook and an example of how to run the (in)famous MoleculeACE benchmark. You can find it [here](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-MoleculeACE.ipynb). Enjoy!
 
 
+S. aureus antibiotics
+=====================          
+1. [Analysis notebook]().       
+2. [Discovery of a structural class of antibiotics with explainable deep learning](https://www.nature.com/articles/s41586-023-06887-8)      
+
+
 IMPLEMENTATION NOTES
 ====================
 
