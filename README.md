@@ -70,7 +70,7 @@ The code works with custom datasets. Let's assume we have a file called `solubil
 fn = 'solubility.csv'
 x_label='SMILES'
 y_label='logS'
-dataset = get_data_from_csv(fn, x_label='SMILES', y_label='logS')
+dataset = get_data_from_csv(fn, x_label=x_label, y_label=y_label)
 tr_dataset = get_tensor_data(dataset[x_label], dataset[y_label].to_list(), pe_dim=6)
 train_loader = DataLoader(tr_dataset, batch_size=256)
 ```
