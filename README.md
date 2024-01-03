@@ -91,7 +91,7 @@ The repository also contains a notebook and an example of how to run the (in)fam
 
 S. aureus antibiotics
 ===================== 
-In this project, I [trained the model]() on the data from the [Discovery of a structural class of antibiotics with explainable deep learning](https://www.nature.com/articles/s41586-023-06887-8) paper. The results are quite decenet right off the bat. 
+In this project, I [trained the model](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-Antibiotics.ipynb) on the data from the [Discovery of a structural class of antibiotics with explainable deep learning](https://www.nature.com/articles/s41586-023-06887-8) paper. The results are quite decenet right off the bat. 
 
 
 IMPLEMENTATION NOTES
