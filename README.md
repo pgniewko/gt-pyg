@@ -70,7 +70,7 @@ The code works with custom datasets. Let's assume we have a file called `solubil
 fn = 'solubility.csv'
 x_label='SMILES'
 y_label='logS'
-dataset = get_data_from_csv(fn, x_label='SMILES', y_label='logS')
+dataset = get_data_from_csv(fn, x_label=x_label, y_label=y_label)
 tr_dataset = get_tensor_data(dataset[x_label], dataset[y_label].to_list(), pe_dim=6)
 train_loader = DataLoader(tr_dataset, batch_size=256)
 ```
@@ -87,6 +87,11 @@ We have empirically [demonstrated](https://github.com/pgniewko/gt-pyg/blob/main/
 MoleculeACE
 ===========
 The repository also contains a notebook and an example of how to run the (in)famous MoleculeACE benchmark. You can find it [here](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-MoleculeACE.ipynb). Enjoy!
+
+
+S. aureus antibiotics
+===================== 
+In this project, I [trained the model]() on the data from the [Discovery of a structural class of antibiotics with explainable deep learning](https://www.nature.com/articles/s41586-023-06887-8) paper. The results are quite decenet right off the bat. 
 
 
 IMPLEMENTATION NOTES
