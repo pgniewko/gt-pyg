@@ -6,6 +6,7 @@ from typing import Tuple
 # Third party
 import pandas as pd
 import numpy as np
+from numpy.linalg import pinv
 from rdkit import Chem
 from rdkit.Chem.rdmolops import GetAdjacencyMatrix
 import torch
@@ -399,7 +400,26 @@ def get_bond_features(bond: Chem.Bond, use_stereochemistry: bool = True) -> np.n
     return np.array(bond_feature_vector)
 
 
-def get_tensor_data(x_smiles: List[str], y: List[float], pe: bool = True, pe_dim: int = 6) -> List[Data]:
+def get_gnn_encodings(mol):
+    # Generate adjacency matrix
+    adjacency_matrix = Chem.GetAdjacencyMatrix(mol)
+
+    # Convert adjacency matrix to numpy array
+    adjacency_np = np.array(adjacency_matrix)
+
+    # Calculate the degree matrix
+    degree_matrix = np.diag(np.sum(adjacency_np, axis=1))
+
+    # Calculate the Laplacian matrix (Kirchhoff matrix)
+    kirchhoff_matrix = degree_matrix - adjacency_np
+
+    # Calculate the inverse of the Kirchhoff matrix
+    inv_kirchhoff_matrix = pinv(kirchhoff_matrix)
+
+    return inv_kirchhoff_matrix
+
+
+def get_tensor_data(x_smiles: List[str], y: List[float], gnn: bool = True, pe: bool = True, pe_dim: int = 6) -> List[Data]:
     """
     Constructs labeled molecular graphs in the form of torch_geometric.data.Data objects
     using SMILES strings and associated numerical labels.
@@ -407,6 +427,7 @@ def get_tensor_data(x_smiles: List[str], y: List[float], pe: bool = True, pe_dim
     Args:
         x_smiles (List[str]): A list of SMILES strings.
         y (List[float]): A list of numerical labels for the SMILES strings (e.g., associated pKi values).
+        gnn (bool, optional): Use Gaussian Network Model style positional encoding.
         pe (bool, optional): Specifies whether to include graph signal (PE) features. Defaults to True.
         pe_dim (int, optional): The number of dimensions to keep in the graph signal. Defaults to 6.
 
@@ -420,10 +441,21 @@ def get_tensor_data(x_smiles: List[str], y: List[float], pe: bool = True, pe_dim
         # convert SMILES to RDKit mol object
         mol = Chem.MolFromSmiles(smiles)
 
+        if gnn:
+            dRdR = get_gnn_encodings(mol)
+        else:
+            dRdR = None
+
         # get feature dimensions
         x = []
         for atom in mol.GetAtoms():
-            x.append(get_atom_features(atom))
+            idx = atom.GetIdx()
+            atom_features = get_atom_features(atom)
+
+            if dRdR is not None:
+                x.append(atom_features + [dRdR[idx][idx]])
+            else:
+                x.append(atom_features)
 
         x = torch.tensor(np.array(x), dtype=torch.float)
 

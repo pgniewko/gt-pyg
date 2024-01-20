@@ -62,8 +62,8 @@ gt = GTConv(node_in_dim=num_node_features,
 gt(x=x, edge_index=edge_index, edge_attr=edge_attr)
 ```
 
-The complete example, which demonstrates the usage of the GTConv layer in a model and training a regression model for the ADME task in the Therapeutics Data Commons, can be found in this [notebook](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-TDC-ADME.ipynb).
-
+The complete example, which demonstrates the usage of the GTConv layer in a model and training a regression model for the ADME task in the Therapeutics Data Commons, can be found in this [notebook](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-TDC-ADME.ipynb).            
+**Note**: The Gaussian Network Model based positional encodings featurization [here](https://github.com/pgniewko/gt-pyg/blob/main/nbs/GT-TDC-ADME-GNN-PE.ipynb)
 
 The code works with custom datasets. Let's assume we have a file called `solubility.csv` with two columns: `SMILES` and `logS`. We can prepare a training `DataLoader` object with the following code.
 ```python
@@ -122,6 +122,8 @@ REFERENCES
 3. [What Uncertainties Do We Need in Bayesian Deep Learning for Computer Vision?](https://arxiv.org/abs/1703.04977)
 4. [Therapeutics Data Commons](https://arxiv.org/abs/2102.09548)
 5. [WeightWatcher](https://weightwatcher.ai/)
+6. [Gaussian Network Model](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.79.3090)
+7. [Yogi from torch-optimizer](https://github.com/jettify/pytorch-optimizer?tab=readme-ov-file#yogi)
 
 COPYRIGHT NOTICE
 ================
