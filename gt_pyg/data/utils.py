@@ -4,6 +4,7 @@ from typing import List
 from typing import Tuple
 
 # Third party
+from tqdm.auto import tqdm
 import pandas as pd
 import numpy as np
 from numpy.linalg import pinv
@@ -11,7 +12,6 @@ from rdkit import Chem
 from rdkit.Chem.rdmolops import GetAdjacencyMatrix
 import torch
 from torch_geometric.data import Data
-from tdc.single_pred import ADME
 from rdkit import RDLogger
 from rdkit import rdBase
 
@@ -133,6 +133,10 @@ def get_train_valid_test_data(endpoint: str, min_num_atoms: int = 0, use_largest
         tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: A tuple containing cleaned train, validation, and test DataFrames.
 
     """
+    try:
+        from tdc.single_pred import ADME
+    except ImportError:
+        raise
 
     data = ADME(name=endpoint)
     splits = data.get_split()
@@ -437,7 +441,7 @@ def get_tensor_data(x_smiles: List[str], y: List[float], gnn: bool = True, pe: b
 
     data_list = []
 
-    for (smiles, y_val) in zip(x_smiles, y):
+    for (smiles, y_val) in tqdm(zip(x_smiles, y), desc="Processing data"):
         # convert SMILES to RDKit mol object
         mol = Chem.MolFromSmiles(smiles)
 
