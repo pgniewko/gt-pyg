@@ -464,7 +464,7 @@ def get_tensor_data(x_smiles: List[str], y: List[float], gnn: bool = True, pe: b
             else:
                 x.append(atom_features)
 
-        x = torch.tensor(np.array(x), dtype=torch.float)
+        x = torch.as_tensor(np.array(x), dtype=torch.float)
 
         # construct edge index array edge_index of shape (2, n_edges)
         (rows, cols) = np.nonzero(GetAdjacencyMatrix(mol))
@@ -475,17 +475,17 @@ def get_tensor_data(x_smiles: List[str], y: List[float], gnn: bool = True, pe: b
         edge_attr = []
         if pe:
             pe_numpy = get_pe(mol, pe_dim=pe_dim)
-            pe_tensor = torch.tensor(pe_numpy, dtype=torch.float)
+            pe_tensor = torch.as_tensor(pe_numpy, dtype=torch.float)
         else:
             pe_tensor = None
 
         for k, (i, j) in enumerate(zip(rows, cols)):
             edge_attr.append(get_bond_features(mol.GetBondBetweenAtoms(int(i), int(j))))
 
-        edge_attr = torch.tensor(np.array(edge_attr), dtype=torch.float)
+        edge_attr = torch.as_tensor(np.array(edge_attr), dtype=torch.float)
 
         # construct label tensor
-        y_tensor = torch.tensor(np.array([y_val]), dtype=torch.float)
+        y_tensor = torch.as_tensor([y_val], dtype=torch.float)
 
         # construct Pytorch Geometric data object and append to data list
         data_list.append(
