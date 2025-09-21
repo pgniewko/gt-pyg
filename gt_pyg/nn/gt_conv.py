@@ -141,6 +141,7 @@ class GTConv(MessagePassing):
             nn.init.xavier_uniform_(self.WOe.weight)
 
     def forward(self, x, edge_index, edge_attr=None):
+        self._num_nodes = x.size(0)
         x_ = x
         edge_attr_ = edge_attr
 
@@ -187,31 +188,32 @@ class GTConv(MessagePassing):
         return (out, out_eij)
 
     def message(self, Q_i, K_j, V_j, G_j, index, edge_attr=None):
-        d_k = Q_i.size(-1)
-        qijk = (Q_i * K_j) / math.sqrt(d_k)
+        Dh = self.hidden_dim // self.num_heads
+
+        assert Dh == Q_i.size(-1)
+
+        logits_vec = (Q_i * K_j) / math.sqrt(Dh)  # [E, H, Dh]
+
         if self.edge_in_dim is not None:
             assert edge_attr is not None
-            E = self.WE(edge_attr).view(-1, self.num_heads, self.hidden_dim // self.num_heads)
-            qijk = E * qijk
-            self._eij = qijk
+            E_vec = self.WE(edge_attr).view(-1, self.num_heads, Dh)  # [E, H, Dh]
+            logits_vec = E_vec * logits_vec
+            self._eij = logits_vec
         else:
             self._eij = None
 
         if self.gate:
             assert edge_attr is not None
-            e_gate = self.e_gate(edge_attr).view(-1, self.num_heads, self.hidden_dim // self.num_heads)
-            qijk = torch.mul(qijk, torch.sigmoid(e_gate))
+            e_gate = self.e_gate(edge_attr).view(-1, self.num_heads, Dh)
+            logits_vec = logits_vec * torch.sigmoid(e_gate)
 
-        qijk = (Q_i * K_j).sum(dim=-1) / math.sqrt(d_k)
-
-        alpha = softmax(qijk, index)  # Log-Sum-Exp trick used. No need for clipping (-5,5)
+        logits = logits_vec.sum(dim=-1)      # [E, H]
+        alpha = softmax(logits, index, num_nodes=self._num_nodes) # [E, H]
 
         if self.gate:
-            V_j_g = torch.mul(V_j, torch.sigmoid(G_j))
-        else:
-            V_j_g = V_j
+            V_j = V_j * torch.sigmoid(G_j)
 
-        return alpha.view(-1, self.num_heads, 1) * V_j_g
+        return alpha.view(-1, self.num_heads, 1) * V_j
 
     def __repr__(self) -> str:
         aggrs = ",".join(self.aggregators)
