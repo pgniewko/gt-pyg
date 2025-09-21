@@ -141,6 +141,7 @@ class GTConv(MessagePassing):
             nn.init.xavier_uniform_(self.WOe.weight)
 
     def forward(self, x, edge_index, edge_attr=None):
+        self._num_nodes = x.size(0)
         x_ = x
         edge_attr_ = edge_attr
 
@@ -189,14 +190,14 @@ class GTConv(MessagePassing):
     def message(self, Q_i, K_j, V_j, G_j, index, edge_attr=None):
         Dh = self.hidden_dim // self.num_heads
 
-        assert d_k == Q_i.size(-1)
+        assert Dh == Q_i.size(-1)
 
         logits_vec = (Q_i * K_j) / math.sqrt(Dh)  # [E, H, Dh]
 
         if self.edge_in_dim is not None:
             assert edge_attr is not None
             E_vec = self.WE(edge_attr).view(-1, self.num_heads, Dh)  # [E, H, Dh]
-            logits_vec = logits_vec * E_vec
+            logits_vec = E_vec * logits_vec
             self._eij = logits_vec
         else:
             self._eij = None
@@ -207,7 +208,7 @@ class GTConv(MessagePassing):
             logits_vec = logits_vec * torch.sigmoid(e_gate)
 
         logits = logits_vec.sum(dim=-1)      # [E, H]
-        alpha = softmax(logits, index)       # [E, H]
+        alpha = softmax(logits, index, num_nodes=self._num_nodes) # [E, H]
 
         if self.gate:
             V_j = V_j * torch.sigmoid(G_j)

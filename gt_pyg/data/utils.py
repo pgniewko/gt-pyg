@@ -41,19 +41,25 @@ def get_edge_dim() -> int:
     return data.edge_attr.size(-1)
 
 
-def clean_df(tdc_df: pd.DataFrame, min_num_atoms: int = 0, use_largest_fragment=True, x_label='Drug', y_label='Y') -> pd.DataFrame:
+def clean_df(
+    tdc_df: pd.DataFrame,
+    min_num_atoms: int = 0,
+    use_largest_fragment: bool = True,
+    x_label: str = "Drug",
+    y_label: str = "Y",
+) -> pd.DataFrame:
     """
-    Cleans a DataFrame containing chemical structures by removing rows that do not meet certain criteria.
+    Clean a DataFrame containing chemical structures by removing rows that do not meet certain criteria.
 
     Args:
-        tdc_df (pd.DataFrame): The input DataFrame containing chemical structures.
-        min_num_atoms (int, optional): The minimum number of atoms required for a structure to be considered valid.
+        tdc_df: The input DataFrame containing chemical structures.
+        min_num_atoms: The minimum number of atoms required for a structure to be considered valid.
             Set to 0 for no size-based filtering. Defaults to 0.
-        use_largest_fragment (bool, optional): Whether to use the largest fragment when cleaning the data.
+        use_largest_fragment: Whether to use the largest fragment when cleaning the data.
             Defaults to True.
-        x_label (str, optional): Label of the column to be used for X variable in the cleaned DataFrame.
+        x_label: Label of the column to be used for X variable in the cleaned DataFrame.
             Defaults to 'Drug'.
-        y_label (str, optional): Label of the column to be used for Y variable in the cleaned DataFrame.
+        y_label: Label of the column to be used for Y variable in the cleaned DataFrame.
             Defaults to 'Y'.
 
     Returns:
@@ -61,61 +67,58 @@ def clean_df(tdc_df: pd.DataFrame, min_num_atoms: int = 0, use_largest_fragment=
     """
 
     def count_fragments(mol):
-        # Helper function to count the number of fragments in a molecule.
-        frags = Chem.GetMolFrags(mol)
-        return len(frags)
+        if mol is None:
+            return 0
+        return len(Chem.GetMolFrags(mol))
 
     def get_largest_fragment(mol):
-        # Remove the counterions
+        if mol is None:
+            return ""
         mol = Chem.RemoveHs(mol)
-
-        # Get the disconnected fragments
         fragments = Chem.GetMolFrags(mol, asMols=True)
-
-        # Calculate the number of heavy atoms in each fragment
+        if not fragments:
+            return ""
         num_atoms = [frag.GetNumHeavyAtoms() for frag in fragments]
-
-        # Identify the index of the largest fragment
         largest_frag_index = num_atoms.index(max(num_atoms))
-
-        # Get the SMILES representation of the largest fragment
-        largest_frag_smiles = Chem.MolToSmiles(fragments[largest_frag_index])
-
-        return largest_frag_smiles
+        return Chem.MolToSmiles(fragments[largest_frag_index])
 
     def count_atoms(mol):
-        # Helper function to count the number of atoms in a molecule.
+        if mol is None:
+            return 0
         return len(mol.GetAtoms())
 
-    # Disable RDKit logging messages
+    # Disable RDKit logging
     for log_level in RDLogger._levels:
         rdBase.DisableLog(log_level)
 
-    # Convert SMILES strings to RDKit Mol objects
+    # Convert SMILES to Mol, drop invalids
+    tdc_df = tdc_df.copy()
     tdc_df["mol"] = tdc_df[x_label].apply(Chem.MolFromSmiles)
+    tdc_df = tdc_df[tdc_df["mol"].notna()].copy()
 
-    # Calculate the number of fragments and atoms for each molecule
-    tdc_df["num_frags"] = tdc_df.mol.apply(count_fragments)
-    tdc_df["largest_fragment"] = tdc_df.mol.apply(get_largest_fragment)
-    tdc_df["num_atoms"] = tdc_df.mol.apply(count_atoms)
+    # Calculate descriptors
+    tdc_df["num_frags"] = tdc_df["mol"].apply(count_fragments)
+    tdc_df["largest_fragment"] = tdc_df["mol"].apply(get_largest_fragment)
+    tdc_df["num_atoms"] = tdc_df["mol"].apply(count_atoms)
 
-    # Filter out rows with more than one fragment and fewer atoms than the specified minimum
+    # Handle fragments
     initial_length = len(tdc_df)
     if use_largest_fragment:
-        tdc_df[x_label] = tdc_df["largest_fragment"].to_list()
+        tdc_df.loc[:, x_label] = tdc_df["largest_fragment"].to_list()
         fragments_removed = 0
     else:
         tdc_df = tdc_df.query("num_frags == 1").copy()
         fragments_removed = initial_length - len(tdc_df)
-        logging.info(f"Removed {fragments_removed} compounds that have more than 1 fragment.")
+        logging.info(f"Removed {fragments_removed} compounds with >1 fragment.")
 
+    # Atom count filtering
     if min_num_atoms > 0:
+        before = len(tdc_df)
         tdc_df = tdc_df.query(f"num_atoms >= {min_num_atoms}").copy()
-        removed_cmpds = initial_length - len(tdc_df) + fragments_removed
-        logging.info(f"Removed {removed_cmpds} compounds that did not meet the size criteria.")
+        removed_cmpds = before - len(tdc_df) + fragments_removed
+        logging.info(f"Removed {removed_cmpds} compounds that did not meet atom count >= {min_num_atoms}.")
 
-    tdc_df = tdc_df[[x_label, y_label]]
-    return tdc_df
+    return tdc_df[[x_label, y_label]].reset_index(drop=True)
 
 
 def get_train_valid_test_data(endpoint: str, min_num_atoms: int = 0, use_largest_fragment: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
