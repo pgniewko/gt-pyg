@@ -126,11 +126,11 @@ class GraphTransformerNet(nn.Module):
         self,
         x: Tensor,
         edge_index: Tensor,
-        edge_attr: Tensor,
-        pe: Tensor,
+        edge_attr: Optional[Tensor],
+        pe: Optional[Tensor],
         batch: Batch,
         zero_var: bool = False,
-    ):
+    ) -> Tuple[Tensor, Tensor]:
         """
         Forward pass of the Graph Transformer Network.
 
@@ -143,18 +143,20 @@ class GraphTransformerNet(nn.Module):
             zero_var (bool): If True, do NOT sample; return deterministic mu.
                              (Variance is still predicted and returned via log_var.)
         Returns:
-            Tuple[Tensor, Tensor]: (prediction, log_var)
+            (prediction, log_var)
                 - prediction: mu if zero_var=True or not training; otherwise a reparameterized sample
                 - log_var: predicted log(variance)
         """
         x = self.node_emb(x)
-        if self.pe_emb is not None:
+        if self.pe_emb is not None and pe is not None:
             x = x + self.pe_emb(pe)
         if self.edge_emb is not None:
+            if edge_attr is None:
+                raise ValueError("edge_attr must be provided when edge_dim_in is set.")
             edge_attr = self.edge_emb(edge_attr)
 
         for gt_layer in self.gt_layers:
-            (x, edge_attr) = gt_layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
+            x, edge_attr = gt_layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
         x = self.global_pool(x, batch)
         mu = self.mu_mlp(x)
@@ -168,5 +170,4 @@ class GraphTransformerNet(nn.Module):
             pred = mu                             # deterministic mean
 
         return pred, log_var
-
 
