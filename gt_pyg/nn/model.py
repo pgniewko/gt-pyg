@@ -126,50 +126,47 @@ class GraphTransformerNet(nn.Module):
         self,
         x: Tensor,
         edge_index: Tensor,
-        edge_attr: Optional[Tensor],
-        pe: Optional[Tensor],
+        edge_attr: Tensor,
+        pe: Tensor,
         batch: Batch,
         zero_var: bool = False,
-    ) -> Tuple[Tensor, Tensor]:
+    ):
         """
+        Forward pass of the Graph Transformer Network.
+
         Args:
             x: Node features [num_nodes, node_dim_in].
             edge_index: Edge indices [2, num_edges].
             edge_attr: Edge features [num_edges, edge_dim_in] if provided.
             pe: Positional encodings [num_nodes, pe_in_dim] if provided.
             batch: Batch vector.
-            zero_var: If True, output std=0 (deterministic).
-
+            zero_var (bool): If True, do NOT sample; return deterministic mu.
+                             (Variance is still predicted and returned via log_var.)
         Returns:
-            (mu_like, std): During training, returns a reparameterized sample and std.
-                            In eval mode, returns (mu, std).
+            Tuple[Tensor, Tensor]: (prediction, log_var)
+                - prediction: mu if zero_var=True or not training; otherwise a reparameterized sample
+                - log_var: predicted log(variance)
         """
         x = self.node_emb(x)
-        if self.pe_emb is not None and pe is not None:
+        if self.pe_emb is not None:
             x = x + self.pe_emb(pe)
-
         if self.edge_emb is not None:
-            if edge_attr is None:
-                raise ValueError("edge_attr must be provided when edge_dim_in is set.")
             edge_attr = self.edge_emb(edge_attr)
 
-        # GT layers
         for gt_layer in self.gt_layers:
-            x, edge_attr = gt_layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
+            (x, edge_attr) = gt_layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
-        # Pool then predict
         x = self.global_pool(x, batch)
         mu = self.mu_mlp(x)
-        log_var = self.log_var_mlp(x)
+        log_var = self.log_var_mlp(x)             # predict log(sigma^2)
+        std = torch.exp(0.5 * log_var)            # sigma
 
-        if zero_var:
-            std = torch.zeros_like(log_var)
-        else:
-            std = torch.exp(0.5 * log_var)
-
-        if self.training:
+        if self.training and not zero_var:
             eps = torch.randn_like(std)
-            return mu + std * eps, std
+            pred = mu + std * eps                 # sample
         else:
-            return mu, std
+            pred = mu                             # deterministic mean
+
+        return pred, log_var
+
 
