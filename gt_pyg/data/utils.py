@@ -2,6 +2,9 @@
 import logging
 from typing import List
 from typing import Tuple
+from typing import Sequence
+from typing import Optional
+from typing import Union
 
 # Third party
 from tqdm.auto import tqdm
@@ -466,76 +469,106 @@ def get_gnn_encodings(mol):
     return inv_kirchhoff_matrix
 
 
-def get_tensor_data(x_smiles: List[str], y: List[float], gnn: bool = True, pe: bool = True, pe_dim: int = 6) -> List[Data]:
+# New helper: normalize a single label entry to a 1D float array (allows missing)
+def _to_float_sequence(y_val: Union[float, int, Sequence[Optional[float]], np.ndarray]) -> np.ndarray:
     """
-    Constructs labeled molecular graphs in the form of torch_geometric.data.Data objects
-    using SMILES strings and associated numerical labels.
+    Convert a per-sample label into a 1D float array.
+      - Single numeric -> shape (1,)
+      - Sequence/array -> shape (T,)
+    Missing entries can be None/np.nan; they remain np.nan for masking later.
+    """
+    if isinstance(y_val, (float, int, np.floating, np.integer)):
+        return np.array([float(y_val)], dtype=np.float32)
+    arr = np.array(y_val, dtype=np.float32)
+    if arr.dtype == object:  # handle None values
+        arr = np.array([np.nan if v is None else float(v) for v in y_val], dtype=np.float32)
+    return arr
+
+
+def get_tensor_data(
+    x_smiles: List[str],
+    y: List[Union[float, int, Sequence[Optional[float]], np.ndarray]],
+    gnn: bool = True,
+    pe: bool = True,
+    pe_dim: int = 6
+) -> List[Data]:
+    """
+    Constructs labeled molecular graphs (torch_geometric.data.Data) using SMILES strings
+    and associated labels. Supports single-task (scalar per sample) and multi-task
+    (sequence per sample) targets. Missing task labels can be None or np.nan; a mask
+    `y_mask` (1.0=present, 0.0=missing) is included in each Data object.
 
     Args:
-        x_smiles (List[str]): A list of SMILES strings.
-        y (List[float]): A list of numerical labels for the SMILES strings (e.g., associated pKi values).
-        gnn (bool, optional): Use Gaussian Network Model style positional encoding.
-        pe (bool, optional): Specifies whether to include graph signal (PE) features. Defaults to True.
-        pe_dim (int, optional): The number of dimensions to keep in the graph signal. Defaults to 6.
+        x_smiles (List[str]): SMILES strings.
+        y (List[...]): Per-sample labels; each item can be:
+                       - single float/int (single-task), or
+                       - sequence/array of floats (multi-task). Missing allowed via None/np.nan.
+        gnn (bool): Use Gaussian Network Model style positional encoding features.
+        pe (bool): Include positional encodings (graph signal) in Data.pe.
+        pe_dim (int): Number of PE dimensions to keep.
 
     Returns:
-        List[Data]: A list of torch_geometric.data.Data objects representing labeled molecular graphs.
+        List[Data]: Each Data has fields:
+            - x, edge_index, edge_attr, pe
+            - y:       shape [num_tasks]
+            - y_mask:  shape [num_tasks] with 1 where label present, 0 where missing
     """
+    data_list: List[Data] = []
 
-    data_list = []
-
-    for (smiles, y_val) in tqdm(zip(x_smiles, y), desc="Processing data"):
-        # convert SMILES to RDKit mol object
+    for smiles, y_val in tqdm(zip(x_smiles, y), total=len(x_smiles), desc="Processing data"):
+        # Parse SMILES
         mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise ValueError(f"RDKit failed to parse SMILES: {smiles}")
 
-        if gnn:
-            dRdR = get_gnn_encodings(mol)
-        else:
-            dRdR = None
+        # Optional GNN-style node augmentation
+        dRdR = get_gnn_encodings(mol) if gnn else None
 
-        # get feature dimensions
-        x = []
+        # Node features
+        x_feat = []
         for atom in mol.GetAtoms():
             idx = atom.GetIdx()
             atom_features = get_atom_features(atom)
-
             if dRdR is not None:
-                x.append(atom_features + [dRdR[idx][idx]])
+                x_feat.append(atom_features + [dRdR[idx][idx]])
             else:
-                x.append(atom_features)
+                x_feat.append(atom_features)
+        x = torch.as_tensor(np.asarray(x_feat), dtype=torch.float)
 
-        x = torch.as_tensor(np.array(x), dtype=torch.float)
-
-        # construct edge index array edge_index of shape (2, n_edges)
-        (rows, cols) = np.nonzero(GetAdjacencyMatrix(mol))
+        # Edges
+        rows, cols = np.nonzero(GetAdjacencyMatrix(mol))
         torch_rows = torch.from_numpy(rows.astype(np.int64)).to(torch.long)
         torch_cols = torch.from_numpy(cols.astype(np.int64)).to(torch.long)
         edge_index = torch.stack([torch_rows, torch_cols], dim=0)
 
-        edge_attr = []
+        # Edge attributes
+        edge_attr_feat = []
         if pe:
             pe_numpy = get_pe(mol, pe_dim=pe_dim)
             pe_tensor = torch.as_tensor(pe_numpy, dtype=torch.float)
         else:
             pe_tensor = None
 
-        for k, (i, j) in enumerate(zip(rows, cols)):
-            edge_attr.append(get_bond_features(mol.GetBondBetweenAtoms(int(i), int(j))))
+        for i, j in zip(rows, cols):
+            edge_attr_feat.append(get_bond_features(mol.GetBondBetweenAtoms(int(i), int(j))))
+        edge_attr = torch.as_tensor(np.asarray(edge_attr_feat), dtype=torch.float)
 
-        edge_attr = torch.as_tensor(np.array(edge_attr), dtype=torch.float)
+        # Labels (multi-task friendly)
+        y_arr = _to_float_sequence(y_val)              # [T]
+        y_mask_arr = np.isfinite(y_arr).astype(np.float32)
+        y_tensor = torch.as_tensor(y_arr, dtype=torch.float)
+        y_mask_tensor = torch.as_tensor(y_mask_arr, dtype=torch.float)
 
-        # construct label tensor
-        y_tensor = torch.as_tensor([y_val], dtype=torch.float)
-
-        # construct Pytorch Geometric data object and append to data list
         data_list.append(
             Data(
                 x=x,
                 edge_index=edge_index,
                 edge_attr=edge_attr,
                 pe=pe_tensor,
-                y=y_tensor,
+                y=y_tensor,          # [num_tasks]
+                y_mask=y_mask_tensor # [num_tasks]
             )
         )
 
     return data_list
+

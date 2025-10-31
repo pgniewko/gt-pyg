@@ -33,8 +33,13 @@ class GraphTransformerNet(nn.Module):
         aggregators: List[str] = ["sum"],
         act: str = "relu",
         dropout: float = 0.0,
+        num_tasks: int = 1,
     ) -> None:
         super().__init__()
+
+        if num_tasks <= 0:
+            raise ValueError("num_tasks must be >= 1")
+        self.num_tasks = int(num_tasks)
 
         # Embeddings
         self.node_emb = nn.Linear(node_dim_in, hidden_dim, bias=False)
@@ -77,7 +82,7 @@ class GraphTransformerNet(nn.Module):
 
         self.mu_mlp = MLP(
             input_dim=head_in_dim,
-            output_dim=1,
+            output_dim=self.num_tasks,
             hidden_dims=hidden_dim,
             num_hidden_layers=1,
             dropout=0.0,
@@ -85,7 +90,7 @@ class GraphTransformerNet(nn.Module):
         )
         self.log_var_mlp = MLP(
             input_dim=head_in_dim,
-            output_dim=1,
+            output_dim=self.num_tasks,
             hidden_dims=hidden_dim,
             num_hidden_layers=1,
             dropout=0.0,
@@ -137,37 +142,42 @@ class GraphTransformerNet(nn.Module):
         Args:
             x: Node features [num_nodes, node_dim_in].
             edge_index: Edge indices [2, num_edges].
-            edge_attr: Edge features [num_edges, edge_dim_in] if provided.
-            pe: Positional encodings [num_nodes, pe_in_dim] if provided.
+            edge_attr: Edge features [num_edges, edge_dim_in] if provided (required if edge_dim_in was set).
+            pe: Positional encodings [num_nodes, pe_in_dim] if provided (required if pe_in_dim was set).
             batch: Batch vector.
             zero_var (bool): If True, do NOT sample; return deterministic mu.
                              (Variance is still predicted and returned via log_var.)
         Returns:
-            (prediction, log_var)
-                - prediction: mu if zero_var=True or not training; otherwise a reparameterized sample
-                - log_var: predicted log(variance)
+            Tuple[Tensor, Tensor]: (prediction, log_var)
+                - prediction: shape [batch_size, num_tasks]; mu if zero_var=True or not training,
+                              otherwise a reparameterized sample
+                - log_var:   shape [batch_size, num_tasks]; predicted log(variance) per task
         """
         x = self.node_emb(x)
-        if self.pe_emb is not None and pe is not None:
+
+        if self.pe_emb is not None:
+            if pe is None:
+                raise ValueError("pe_in_dim was set in __init__, but 'pe' is None in forward().")
             x = x + self.pe_emb(pe)
+
         if self.edge_emb is not None:
             if edge_attr is None:
-                raise ValueError("edge_attr must be provided when edge_dim_in is set.")
+                raise ValueError("edge_dim_in was set in __init__, but 'edge_attr' is None in forward().")
             edge_attr = self.edge_emb(edge_attr)
 
         for gt_layer in self.gt_layers:
             x, edge_attr = gt_layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
         x = self.global_pool(x, batch)
-        mu = self.mu_mlp(x)
-        log_var = self.log_var_mlp(x)             # predict log(sigma^2)
-        std = torch.exp(0.5 * log_var)            # sigma
+        mu = self.mu_mlp(x)                  # [B, T]
+        log_var = self.log_var_mlp(x)        # [B, T]
+        std = torch.exp(0.5 * log_var)       # [B, T]
 
         if self.training and not zero_var:
             eps = torch.randn_like(std)
-            pred = mu + std * eps                 # sample
+            pred = mu + std * eps            # sample: [B, T]
         else:
-            pred = mu                             # deterministic mean
+            pred = mu                        # deterministic mean: [B, T]
 
         return pred, log_var
 
