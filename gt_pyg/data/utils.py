@@ -42,7 +42,7 @@ def get_edge_dim() -> int:
 
 
 def clean_df(
-    tdc_df: pd.DataFrame,
+    df: pd.DataFrame,
     min_num_atoms: int = 0,
     use_largest_fragment: bool = True,
     x_label: str = "Drug",
@@ -51,74 +51,114 @@ def clean_df(
     """
     Clean a DataFrame containing chemical structures by removing rows that do not meet certain criteria.
 
+    Notes:
+      - Molecules are sanitized and canonicalized while preserving ionization state and stereochemistry.
+      - If a molecule has only one fragment, the resulting SMILES corresponds to the same molecule
+        (possibly only canonicalized, not neutralized or stereochem-flattened).
+      - If use_largest_fragment is True and a molecule has multiple fragments, the largest fragment is chosen
+        (no neutralization; stereochemistry preserved).
+
     Args:
-        tdc_df: The input DataFrame containing chemical structures.
-        min_num_atoms: The minimum number of atoms required for a structure to be considered valid.
-            Set to 0 for no size-based filtering. Defaults to 0.
-        use_largest_fragment: Whether to use the largest fragment when cleaning the data.
-            Defaults to True.
-        x_label: Label of the column to be used for X variable in the cleaned DataFrame.
-            Defaults to 'Drug'.
-        y_label: Label of the column to be used for Y variable in the cleaned DataFrame.
-            Defaults to 'Y'.
+        df: The input DataFrame containing chemical structures.
+        min_num_atoms: Minimum number of atoms required (0 means no size filtering).
+        use_largest_fragment: Whether to use the largest fragment for multi-fragment inputs.
+        x_label: Column name containing input SMILES.
+        y_label: Column name to keep alongside cleaned SMILES.
 
     Returns:
-        pd.DataFrame: A cleaned DataFrame with rows that satisfy the specified criteria.
+        pd.DataFrame with columns [x_label, y_label].
     """
+
+    # --- Helpers ---
+    def to_mol(smi: str):
+        if not isinstance(smi, str):
+            return None
+        try:
+            # sanitize=True is default; ensures valence checks etc.
+            return Chem.MolFromSmiles(smi)
+        except Exception:
+            return None
 
     def count_fragments(mol):
         if mol is None:
             return 0
         return len(Chem.GetMolFrags(mol))
 
-    def get_largest_fragment(mol):
+    def get_largest_fragment_mol(mol):
+        """Return RDKit Mol of the largest fragment (preserve charges/stereo; don't remove Hs)."""
         if mol is None:
-            return ""
-        mol = Chem.RemoveHs(mol)
-        fragments = Chem.GetMolFrags(mol, asMols=True)
-        if not fragments:
-            return ""
-        num_atoms = [frag.GetNumHeavyAtoms() for frag in fragments]
-        largest_frag_index = num_atoms.index(max(num_atoms))
-        return Chem.MolToSmiles(fragments[largest_frag_index])
+            return None
+        frags = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False)
+        if not frags:
+            return None
+        # Use heavy atom count for size
+        sizes = [frag.GetNumHeavyAtoms() for frag in frags]
+        return frags[sizes.index(max(sizes))]
 
     def count_atoms(mol):
         if mol is None:
             return 0
-        return len(mol.GetAtoms())
+        return mol.GetNumAtoms()
 
-    # Disable RDKit logging
+    def canonical_smiles(mol):
+        """Canonicalize while preserving ionization and stereochemistry."""
+        if mol is None:
+            return ""
+        # isomericSmiles=True preserves stereochemistry; canonical ordering is default
+        return Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)
+
+    # --- Quiet RDKit noise ---
     for log_level in RDLogger._levels:
         rdBase.DisableLog(log_level)
 
-    # Convert SMILES to Mol, drop invalids
-    tdc_df = tdc_df.copy()
-    tdc_df["mol"] = tdc_df[x_label].apply(Chem.MolFromSmiles)
-    tdc_df = tdc_df[tdc_df["mol"].notna()].copy()
+    # --- Work on a copy ---
+    df = df.copy()
 
-    # Calculate descriptors
-    tdc_df["num_frags"] = tdc_df["mol"].apply(count_fragments)
-    tdc_df["largest_fragment"] = tdc_df["mol"].apply(get_largest_fragment)
-    tdc_df["num_atoms"] = tdc_df["mol"].apply(count_atoms)
+    # Convert SMILES -> Mol and drop invalids
+    df["mol"] = df[x_label].apply(to_mol)
+    df = df[df["mol"].notna()].copy()
 
-    # Handle fragments
-    initial_length = len(tdc_df)
+    # Descriptor columns
+    df["num_frags"] = df["mol"].apply(count_fragments)
+    df["num_atoms"] = df["mol"].apply(count_atoms)
+
+    # Fragment handling
+    initial_len = len(df)
     if use_largest_fragment:
-        tdc_df.loc[:, x_label] = tdc_df["largest_fragment"].to_list()
-        fragments_removed = 0
+        # For multi-fragment molecules, take largest fragment; for single-fragment, keep the same molecule.
+        def select_clean_mol(mol):
+            if mol is None:
+                return None
+            if count_fragments(mol) <= 1:
+                return mol  # same molecule (only canonicalized later)
+            return get_largest_fragment_mol(mol)
+
+        df["clean_mol"] = df["mol"].apply(select_clean_mol)
+        fragments_removed = 0  # not strictly removing rows here
     else:
-        tdc_df = tdc_df.query("num_frags == 1").copy()
-        fragments_removed = initial_length - len(tdc_df)
+        # Keep only single-fragment molecules
+        df = df.query("num_frags == 1").copy()
+        df["clean_mol"] = df["mol"]
+        fragments_removed = initial_len - len(df)
         logging.info(f"Removed {fragments_removed} compounds with >1 fragment.")
 
-    # Atom count filtering
-    if min_num_atoms > 0:
-        before = len(tdc_df)
-        tdc_df = tdc_df.query(f"num_atoms >= {min_num_atoms}").copy()
-        removed_cmpds = before - len(tdc_df) + fragments_removed
-        logging.info(f"Removed {removed_cmpds} compounds that did not meet atom count >= {min_num_atoms}.")
+    # Recompute atom counts on the selected/clean mols (in case fragment choice changed size)
+    df["num_atoms_clean"] = df["clean_mol"].apply(count_atoms)
 
-    return tdc_df[[x_label, y_label]].reset_index(drop=True)
+    # Atom-count filter
+    if min_num_atoms > 0:
+        before = len(df)
+        df = df.query(f"num_atoms_clean >= {min_num_atoms}").copy()
+        removed_cmpds = (before - len(df)) + fragments_removed
+        logging.info(
+            f"Removed {removed_cmpds} compounds that did not meet atom count >= {min_num_atoms}."
+        )
+
+    # Produce final canonical SMILES, preserving ionization and stereochemistry
+    df[x_label] = df["clean_mol"].apply(canonical_smiles)
+
+    # Return just the requested columns
+    return df[[x_label, y_label]].reset_index(drop=True)
 
 
 def get_train_valid_test_data(endpoint: str, min_num_atoms: int = 0, use_largest_fragment: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
