@@ -405,6 +405,13 @@ def get_atom_features(atom: Chem.Atom, use_chirality: bool = True, hydrogens_imp
         )
         atom_feature_vector += chirality_type_enc
 
+        # CIP (Cahn–Ingold–Prelog) R/S label (falls back to 'Unknown' if not present)
+        cip = atom.GetProp("_CIPCode") if atom.HasProp("_CIPCode") else "Unknown"
+        # Optionally support lowercase 'r'/'s' by normalizing:
+        cip = cip.upper()
+        cip_enc = one_hot_encoding(cip, ["R", "S", "UNKNOWN"])
+        atom_feature_vector += cip_enc
+
     if hydrogens_implicit:
         n_hydrogens_enc = one_hot_encoding(
             int(atom.GetTotalNumHs()), [0, 1, 2, 3, 4, "MoreThanFour"]
@@ -518,6 +525,9 @@ def get_tensor_data(
     for smiles, y_val in tqdm(zip(x_smiles, y), total=len(x_smiles), desc="Processing data"):
         # Parse SMILES
         mol = Chem.MolFromSmiles(smiles)
+
+        Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
+
         if mol is None:
             raise ValueError(f"RDKit failed to parse SMILES: {smiles}")
 
