@@ -13,6 +13,7 @@ import numpy as np
 from numpy.linalg import pinv
 from rdkit import Chem
 from rdkit.Chem.rdmolops import GetAdjacencyMatrix
+from rdkit.Chem.SaltRemover import SaltRemover
 import torch
 from torch_geometric.data import Data
 from rdkit import RDLogger
@@ -492,6 +493,55 @@ def _to_float_sequence(y_val: Union[float, int, Sequence[Optional[float]], np.nd
     return arr
 
 
+def clean_smiles_openadmet(
+    smiles: str,
+    remove_hs: bool = True,
+    strip_stereochem: bool = False,
+    strip_salts: bool = True,
+) -> str:
+    """Applies preprocessing to SMILES strings, seeking the 'parent' SMILES
+
+    Note that this is different from simply _neutralizing_ the input SMILES - we attempt to get the parent molecule, analogous to a molecular skeleton.
+    This is adapted in part from https://rdkit.org/docs/Cookbook.html#neutralizing-molecules
+
+    Args:
+        smiles (str): input SMILES
+        remove_hs (bool, optional): Removes hydrogens. Defaults to True.
+        strip_stereochem (bool, optional): Remove R/S and cis/trans stereochemistry. Defaults to False.
+        strip_salts (bool, optional): Remove salt ions. Defaults to True.
+
+    Returns:
+        str: cleaned SMILES
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        assert mol is not None, f"Could not parse SMILES {smiles}"
+        if remove_hs:
+            mol = Chem.RemoveHs(mol)
+        if strip_stereochem:
+            Chem.RemoveStereochemistry(mol)
+        if strip_salts:
+            remover = SaltRemover()  # use default saltremover
+            mol = remover.StripMol(mol)  # strip salts
+
+        pattern = Chem.MolFromSmarts("[+1!h0!$([*]~[-1,-2,-3,-4]),-1!$([*]~[+1,+2,+3,+4])]")
+        at_matches = mol.GetSubstructMatches(pattern)
+        at_matches_list = [y[0] for y in at_matches]
+        if len(at_matches_list) > 0:
+            for at_idx in at_matches_list:
+                atom = mol.GetAtomWithIdx(at_idx)
+                chg = atom.GetFormalCharge()
+                hcount = atom.GetTotalNumHs()
+                atom.SetFormalCharge(0)
+                atom.SetNumExplicitHs(hcount - chg)
+                atom.UpdatePropertyCache()
+        out_smi = Chem.MolToSmiles(mol, kekuleSmiles=True)  # this also canonicalizes the input
+        assert len(out_smi) > 0, f"Could not convert molecule to SMILES {smiles}"
+        return out_smi
+    except Exception as e:
+        print(f"Failed to clean SMILES {smiles} due to {e}")
+        return None
+
 def get_tensor_data(
     x_smiles: List[str],
     y: List[Union[float, int, Sequence[Optional[float]], np.ndarray]],
@@ -524,6 +574,7 @@ def get_tensor_data(
 
     for smiles, y_val in tqdm(zip(x_smiles, y), total=len(x_smiles), desc="Processing data"):
         # Parse SMILES
+        smiles = clean_smiles_openadmet(smiles)
         mol = Chem.MolFromSmiles(smiles)
 
         Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
