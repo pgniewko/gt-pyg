@@ -82,8 +82,7 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 This implementation combines design ideas from **graph transformers**
 and **modern deep transformer stabilization techniques**, integrating
-the core principles of the original Graph Transformer with contemporary
-training improvements.
+the core principles of the original Graph Transformer.
 
 ### 1. A Generalization of Transformer Networks to Graphs
 
@@ -126,22 +125,6 @@ To reproduce the original (ungated) Graph Transformer, set
 -   Small datasets are handled as in-memory lists of `Data` objects,
     avoiding custom dataset definitions.
 
-------------------------------------------------------------------------
-
-### Summary
-
-This implementation remains faithful to the **Graph Transformer**
-paradigm but enhances it with: 
-- Attention and residual regularization
-(`attn_dropout`, `drop_path`)
-- Pre-Norm stability for deep architectures
-- Optional edge updates for efficiency
-- Zero-initialized projections for smoother optimization
-
-Together, these refinements make the `GTConv` layer more stable,
-scalable, and flexible for both molecular and general graph learning
-tasks.
-
 --- 
 
 ## REFERENCES
@@ -153,7 +136,7 @@ tasks.
 
 ## COPYRIGHT NOTICE
 
-Copyright (C) 2023–  
+Copyright (C) 2023-Present   
 **Pawel Gniewek**  
 Email: gniewko.pablo@gmail.com  
 License: MIT  
