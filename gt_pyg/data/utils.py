@@ -1,45 +1,36 @@
-# Standard
+# Standard library
 import logging
-from typing import List
-from typing import Tuple
-from typing import Sequence
-from typing import Optional
-from typing import Union
+from typing import List, Optional, Sequence, Union
 
-# Third party
-from tqdm.auto import tqdm
-import pandas as pd
+# Third-party
 import numpy as np
-from numpy.linalg import pinv
-from rdkit import Chem
-from rdkit.Chem.rdmolops import GetAdjacencyMatrix
-from rdkit.Chem.SaltRemover import SaltRemover
+import pandas as pd
 import torch
+from numpy.linalg import pinv
+from rdkit import Chem, RDLogger, rdBase
+from rdkit.Chem.rdmolops import GetAdjacencyMatrix
 from torch_geometric.data import Data
-from rdkit import RDLogger
-from rdkit import rdBase
+from tqdm.auto import tqdm
 
 
 __SMILES = "c1ccccc1"
 
 
 def get_node_dim() -> int:
-    """
-    Retrieves the dimensionality of the node feature vector.
+    """Return the dimensionality of the node feature vector.
 
     Returns:
-        int: The dimensionality of the node feature vector.
+        int: Number of features per node.
     """
     data = get_tensor_data([__SMILES], [0], pe=False)[0]
     return data.x.size(-1)
 
 
 def get_edge_dim() -> int:
-    """
-    Retrieves the dimensionality of the edge feature vector.
+    """Return the dimensionality of the edge feature vector.
 
     Returns:
-        int: The dimensionality of the edge feature vector.
+        int: Number of features per edge.
     """
     data = get_tensor_data([__SMILES], [0], pe=False)[0]
     return data.edge_attr.size(-1)
@@ -52,25 +43,25 @@ def clean_df(
     x_label: str = "Drug",
     y_label: str = "Y",
 ) -> pd.DataFrame:
-    """
-    Clean a DataFrame containing chemical structures by removing rows that do not meet certain criteria.
+    """Clean a DataFrame of SMILES/labels with fragment handling and size filters.
 
     Notes:
-      - Molecules are sanitized and canonicalized while preserving ionization state and stereochemistry.
-      - If a molecule has only one fragment, the resulting SMILES corresponds to the same molecule
-        (possibly only canonicalized, not neutralized or stereochem-flattened).
-      - If use_largest_fragment is True and a molecule has multiple fragments, the largest fragment is chosen
-        (no neutralization; stereochemistry preserved).
+        * Molecules are sanitized and canonicalized while preserving ionization and stereochemistry.
+        * If a molecule has one fragment, it is kept as-is (then canonicalized).
+        * If ``use_largest_fragment`` is True and a molecule has multiple fragments, the largest
+          fragment (by heavy-atom count) is chosen. No neutralization is performed.
 
     Args:
-        df: The input DataFrame containing chemical structures.
-        min_num_atoms: Minimum number of atoms required (0 means no size filtering).
-        use_largest_fragment: Whether to use the largest fragment for multi-fragment inputs.
-        x_label: Column name containing input SMILES.
-        y_label: Column name to keep alongside cleaned SMILES.
+        df (pd.DataFrame): Input table containing SMILES and labels.
+        min_num_atoms (int, optional): Minimum atom count after fragment selection.
+            ``0`` disables size filtering. Defaults to ``0``.
+        use_largest_fragment (bool, optional): Whether to select the largest fragment
+            for multi-fragment inputs. Defaults to ``True``.
+        x_label (str, optional): Column name with input SMILES. Defaults to ``"Drug"``.
+        y_label (str, optional): Column name to keep with cleaned SMILES. Defaults to ``"Y"``.
 
     Returns:
-        pd.DataFrame with columns [x_label, y_label].
+        pd.DataFrame: Cleaned table with columns ``[x_label, y_label]``.
     """
 
     # --- Helpers ---
@@ -78,8 +69,7 @@ def clean_df(
         if not isinstance(smi, str):
             return None
         try:
-            # sanitize=True is default; ensures valence checks etc.
-            return Chem.MolFromSmiles(smi)
+            return Chem.MolFromSmiles(smi)  # sanitize=True by default
         except Exception:
             return None
 
@@ -89,13 +79,12 @@ def clean_df(
         return len(Chem.GetMolFrags(mol))
 
     def get_largest_fragment_mol(mol):
-        """Return RDKit Mol of the largest fragment (preserve charges/stereo; don't remove Hs)."""
+        """Return RDKit Mol of the largest fragment (preserve charges/stereo)."""
         if mol is None:
             return None
         frags = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False)
         if not frags:
             return None
-        # Use heavy atom count for size
         sizes = [frag.GetNumHeavyAtoms() for frag in frags]
         return frags[sizes.index(max(sizes))]
 
@@ -108,7 +97,6 @@ def clean_df(
         """Canonicalize while preserving ionization and stereochemistry."""
         if mol is None:
             return ""
-        # isomericSmiles=True preserves stereochemistry; canonical ordering is default
         return Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)
 
     # --- Quiet RDKit noise ---
@@ -129,24 +117,22 @@ def clean_df(
     # Fragment handling
     initial_len = len(df)
     if use_largest_fragment:
-        # For multi-fragment molecules, take largest fragment; for single-fragment, keep the same molecule.
         def select_clean_mol(mol):
             if mol is None:
                 return None
             if count_fragments(mol) <= 1:
-                return mol  # same molecule (only canonicalized later)
+                return mol
             return get_largest_fragment_mol(mol)
 
         df["clean_mol"] = df["mol"].apply(select_clean_mol)
-        fragments_removed = 0  # not strictly removing rows here
+        fragments_removed = 0
     else:
-        # Keep only single-fragment molecules
         df = df.query("num_frags == 1").copy()
         df["clean_mol"] = df["mol"]
         fragments_removed = initial_len - len(df)
         logging.info(f"Removed {fragments_removed} compounds with >1 fragment.")
 
-    # Recompute atom counts on the selected/clean mols (in case fragment choice changed size)
+    # Recompute atom counts after fragment selection
     df["num_atoms_clean"] = df["clean_mol"].apply(count_atoms)
 
     # Atom-count filter
@@ -158,167 +144,89 @@ def clean_df(
             f"Removed {removed_cmpds} compounds that did not meet atom count >= {min_num_atoms}."
         )
 
-    # Produce final canonical SMILES, preserving ionization and stereochemistry
+    # Final canonical SMILES
     df[x_label] = df["clean_mol"].apply(canonical_smiles)
 
-    # Return just the requested columns
     return df[[x_label, y_label]].reset_index(drop=True)
 
 
-def get_train_valid_test_data(endpoint: str, min_num_atoms: int = 0, use_largest_fragment: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Retrieves and cleans the train, validation, and test data for a specific endpoint in the ADME dataset.
-
-    Args:
-        endpoint (str): The name of the endpoint in the ADME dataset.
-        min_num_atoms (int, optional): The minimum number of atoms required for a structure to be considered valid.
-            Set to 0 for no size-based filtering. Defaults to 0.
-        use_largest_fragment (bool, optional): Whether to use the largest fragment when cleaning the data.
-            Defaults to True.
-
-    Returns:
-        tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: A tuple containing cleaned train, validation, and test DataFrames.
-
-    """
-    try:
-        from tdc.single_pred import ADME
-    except ImportError:
-        raise
-
-    data = ADME(name=endpoint)
-    splits = data.get_split()
-
-    train_data = clean_df(splits["train"], min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment)
-    valid_data = clean_df(splits["valid"], min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment)
-    test_data = clean_df(splits["test"], min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment)
-
-    return (train_data, valid_data, test_data)
-
-
-def get_molecule_ace_datasets(
-    dataset: str,
-    training_fraction: float = 1.0,
-    valid_fraction: float = 0.0,
-    seed: int = 42,
+def get_data_from_csv(
+    filename: str,
+    x_label: str,
+    y_label: str,
+    sep: str = ",",
     min_num_atoms: int = 0,
-    use_largest_fragment: bool = True
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Retrieve molecule ACE datasets.
+    use_largest_fragment: bool = True,
+) -> pd.DataFrame:
+    """Read a CSV and return a cleaned SMILES/label DataFrame.
 
     Args:
-        dataset (str): Name of the dataset.
-        training_fraction (float, optional): Fraction of data to use for training. Defaults to 1.0.
-        valid_fraction (float, optional): Fraction of data to use for validation. Defaults to 0.0.
-        seed (int, optional): Random seed for shuffling. Defaults to 42.
-        min_num_atoms (int, optional): Minimum number of atoms required for a molecule to be included. Defaults to 0.
-        use_largest_fragment (bool, optional): Whether to use the largest fragment of a molecule. Defaults to True.
-
-    Returns:
-        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: A tuple containing train, validation, and test datasets as pandas DataFrames.
-    """
-    try:
-        from MoleculeACE import Data
-    except ImportError:
-        logging.info('Importing MoleculeACE failed')
-        raise
-
-    data = Data(dataset)
-    df_train_tmp = pd.DataFrame({'SMILES': data.smiles_train, 'Y': data.y_train})
-    df_test = pd.DataFrame({'SMILES': data.smiles_test, 'Y': data.y_test})
-
-    shuffled_df = df_train_tmp.sample(frac=1, random_state=seed)
-
-    ratio = training_fraction / (training_fraction + valid_fraction)
-    # Calculate the split index based on the ratio
-    split_index = int(ratio * len(shuffled_df))
-
-    # Split the shuffled DataFrame into two separate DataFrames
-    df_train = shuffled_df.iloc[:split_index]
-    df_valid = shuffled_df.iloc[split_index:]
-
-    train_data = clean_df(df_train, min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment, x_label="SMILES")
-    valid_data = clean_df(df_valid, min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment, x_label="SMILES")
-    test_data = clean_df(df_test, min_num_atoms=min_num_atoms, use_largest_fragment=use_largest_fragment, x_label="SMILES")
-
-    return (train_data, valid_data, test_data)
-
-
-def get_data_from_csv(filename: str, x_label: str, y_label: str, sep: str = ',', min_num_atoms: int = 0, use_largest_fragment: bool = True) -> pd.DataFrame:
-    """
-    Reads data from a CSV file and returns a cleaned DataFrame containing specified columns.
-
-    Parameters:
         filename (str): Path to the CSV file.
-        x_label (str): Label of the column to be used as the X variable.
-        y_label (str): Label of the column to be used as the Y variable.
-        sep (str, optional): Separator used in the CSV file. Default is ','.
-        min_num_atoms (int, optional): The minimum number of atoms required for a structure to be considered valid.
-            Set to 0 for no size-based filtering. Defaults to 0.
-        use_largest_fragment (bool, optional): Whether to use the largest fragment when cleaning the data.
-            Defaults to True.
+        x_label (str): Column name to use as the X variable (SMILES).
+        y_label (str): Column name to use as the Y variable (label).
+        sep (str, optional): CSV separator. Defaults to ``","``.
+        min_num_atoms (int, optional): Minimum atom count filter (see ``clean_df``).
+            ``0`` disables size filtering. Defaults to ``0``.
+        use_largest_fragment (bool, optional): Whether to select the largest fragment
+            for multi-fragment inputs (see ``clean_df``). Defaults to ``True``.
 
     Returns:
-        pandas.DataFrame: A cleaned DataFrame containing only the specified X and Y columns.
+        pd.DataFrame: Cleaned DataFrame with columns ``[x_label, y_label]``.
 
     Example:
-        data = get_data_from_csv('data.csv', 'X', 'Y')
+        >>> data = get_data_from_csv("data.csv", "X", "Y")
     """
     df = pd.read_csv(filename, sep=sep)
     df = df[[x_label, y_label]]
-
-    data = clean_df(df,
-                    min_num_atoms=min_num_atoms,
-                    use_largest_fragment=use_largest_fragment,
-                    x_label=x_label,
-                    y_label=y_label)
-    return data
+    return clean_df(
+        df,
+        min_num_atoms=min_num_atoms,
+        use_largest_fragment=use_largest_fragment,
+        x_label=x_label,
+        y_label=y_label,
+    )
 
 
 def one_hot_encoding(x: str, permitted_list: List[str]) -> List[int]:
-    """
-    Maps input elements x which are not in the permitted list to the last element
-    of the permitted list.
+    """Return a one-hot encoding for ``x`` over a permitted vocabulary.
+
+    Any ``x`` not in ``permitted_list`` is mapped to the last element.
 
     Args:
-        x: The input element to be encoded.
-        permitted_list: The list of permitted elements.
+        x (str): Input token/value.
+        permitted_list (List[str]): Allowed vocabulary.
 
     Returns:
-        binary_encoding: A list representing the binary encoding of the input element.
+        List[int]: One-hot vector of length ``len(permitted_list)``.
     """
     if x not in permitted_list:
         x = permitted_list[-1]
-
-    binary_encoding = [
-        int(boolean_value)
-        for boolean_value in list(map(lambda s: x == s, permitted_list))
-    ]
-
-    return binary_encoding
+    return [int(x == s) for s in permitted_list]
 
 
 def get_pe(mol: Chem.Mol, pe_dim: int = 6, normalized: bool = True) -> np.ndarray:
-    """
-    Calculates the graph signal using the normalized Laplacian.
+    """Compute positional encodings via Laplacian eigenvectors.
+
+    Uses the (optionally normalized) graph Laplacian on the molecular graph and
+    returns the first ``pe_dim`` non-trivial eigenvectors.
 
     Args:
-        mol: The input molecule.
-        pe_dim: The number of dimensions to keep in the graph signal. Defaults to 6.
-        normalized: Specifies whether to use normalized Laplacian. Defaults to True.
+        mol (Chem.Mol): Input molecule.
+        pe_dim (int, optional): Number of eigenvectors to keep. Defaults to ``6``.
+        normalized (bool, optional): Use normalized Laplacian if True. Defaults to ``True``.
 
     Returns:
-        np.ndarray: The graph signal of the molecule.
+        np.ndarray: Array of shape ``[num_atoms, pe_dim]``.
     """
     adj = Chem.rdmolops.GetAdjacencyMatrix(mol)
     degree = np.diag(np.sum(adj, axis=1))
     laplacian = degree - adj
     if normalized:
-        degree_inv_sqrt = np.diag(np.sum(adj, axis=1) ** (-1.0 / 2.0))
+        degree_inv_sqrt = np.diag(np.sum(adj, axis=1) ** (-0.5))
         laplacian = degree_inv_sqrt @ laplacian @ degree_inv_sqrt
     try:
         val, vec = np.linalg.eig(laplacian)
-    except:
+    except Exception:
         print(Chem.MolToSmiles(mol))
         raise
 
@@ -326,61 +234,44 @@ def get_pe(mol: Chem.Mol, pe_dim: int = 6, normalized: bool = True) -> np.ndarra
     N = vec.shape[1]
     M = pe_dim + 1
     if N < M:
-        vec = np.pad(vec, ((0, 0), (0, M - N)), mode='constant')
+        vec = np.pad(vec, ((0, 0), (0, M - N)), mode="constant")
 
     return vec[:, 1:M]
 
 
-def get_atom_features(atom: Chem.Atom, use_chirality: bool = True, hydrogens_implicit: bool = True) -> np.ndarray:
-    """
-    Computes a 1D numpy array of atom features from an RDKit atom object.
+def get_atom_features(
+    atom: Chem.Atom,
+    use_chirality: bool = True,
+    hydrogens_implicit: bool = True,
+) -> np.ndarray:
+    """Compute a 1D array of atom features from an RDKit atom.
 
     Args:
-        atom (Chem.Atom): The RDKit atom object.
-        use_chirality (bool, optional): Specifies whether to include chirality information. Defaults to True.
-        hydrogens_implicit (bool, optional): Specifies whether to include implicit hydrogen count. Defaults to True.
+        atom (Chem.Atom): RDKit atom.
+        use_chirality (bool, optional): Include chirality (R/S, chiral tag). Defaults to ``True``.
+        hydrogens_implicit (bool, optional): Include implicit hydrogen count features.
+            Defaults to ``True``.
 
     Returns:
-        np.ndarray: A 1D numpy array representing the atom features.
+        np.ndarray: Atom feature vector.
     """
     permitted_list_of_atoms = [
         "C", "N", "O", "S", "F", "Si", "P", "Cl", "Br", "Mg", "Na", "Ca", "Fe",
         "As", "Al", "I", "B", "V", "K", "Tl", "Yb", "Sb", "Sn", "Ag", "Pd",
         "Co", "Se", "Ti", "Zn", "Li", "Ge", "Cu", "Au", "Ni", "Cd", "In", "Mn",
-        "Zr", "Cr", "Pt", "Hg", "Pb", "Unknown"
+        "Zr", "Cr", "Pt", "Hg", "Pb", "Unknown",
     ]
-
     if not hydrogens_implicit:
         permitted_list_of_atoms = ["H"] + permitted_list_of_atoms
 
     atom_type_enc = one_hot_encoding(str(atom.GetSymbol()), permitted_list_of_atoms)
-
-    n_heavy_neighbors_enc = one_hot_encoding(
-        int(atom.GetDegree()), [0, 1, 2, 3, 4, "MoreThanFour"]
-    )
-
-    formal_charge_enc = one_hot_encoding(
-        int(atom.GetFormalCharge()), [-3, -2, -1, 0, 1, 2, 3, "Extreme"]
-    )
-
+    n_heavy_neighbors_enc = one_hot_encoding(int(atom.GetDegree()), [0, 1, 2, 3, 4, "MoreThanFour"])
+    formal_charge_enc = one_hot_encoding(int(atom.GetFormalCharge()), [-3, -2, -1, 0, 1, 2, 3, "Extreme"])
     hybridisation_type_enc = one_hot_encoding(
-        str(atom.GetHybridization()),
-        ["S", "SP", "SP2", "SP3", "SP3D", "SP3D2", "OTHER"],
+        str(atom.GetHybridization()), ["S", "SP", "SP2", "SP3", "SP3D", "SP3D2", "OTHER"]
     )
-
     is_in_a_ring_enc = [int(atom.IsInRing())]
-
     is_aromatic_enc = [int(atom.GetIsAromatic())]
-
-#    atomic_mass_scaled = [float((atom.GetMass() - 10.812) / 116.092)]
-#
-#    vdw_radius_scaled = [
-#        float((Chem.GetPeriodicTable().GetRvdw(atom.GetAtomicNum()) - 1.5) / 0.6)
-#    ]
-#
-#    covalent_radius_scaled = [
-#        float((Chem.GetPeriodicTable().GetRcovalent(atom.GetAtomicNum()) - 0.64) / 0.76)
-#    ]
 
     atom_feature_vector = (
         atom_type_enc
@@ -389,50 +280,37 @@ def get_atom_features(atom: Chem.Atom, use_chirality: bool = True, hydrogens_imp
         + hybridisation_type_enc
         + is_in_a_ring_enc
         + is_aromatic_enc
-#        + atomic_mass_scaled
-#        + vdw_radius_scaled
-#        + covalent_radius_scaled
     )
 
     if use_chirality:
         chirality_type_enc = one_hot_encoding(
             str(atom.GetChiralTag()),
-            [
-                "CHI_UNSPECIFIED",
-                "CHI_TETRAHEDRAL_CW",
-                "CHI_TETRAHEDRAL_CCW",
-                "CHI_OTHER",
-            ],
+            ["CHI_UNSPECIFIED", "CHI_TETRAHEDRAL_CW", "CHI_TETRAHEDRAL_CCW", "CHI_OTHER"],
         )
         atom_feature_vector += chirality_type_enc
 
-        # CIP (Cahn–Ingold–Prelog) R/S label (falls back to 'Unknown' if not present)
         cip = atom.GetProp("_CIPCode") if atom.HasProp("_CIPCode") else "Unknown"
-        # Optionally support lowercase 'r'/'s' by normalizing:
         cip = cip.upper()
         cip_enc = one_hot_encoding(cip, ["R", "S", "UNKNOWN"])
         atom_feature_vector += cip_enc
 
     if hydrogens_implicit:
-        n_hydrogens_enc = one_hot_encoding(
-            int(atom.GetTotalNumHs()), [0, 1, 2, 3, 4, "MoreThanFour"]
-        )
+        n_hydrogens_enc = one_hot_encoding(int(atom.GetTotalNumHs()), [0, 1, 2, 3, 4, "MoreThanFour"])
         atom_feature_vector += n_hydrogens_enc
 
     return np.array(atom_feature_vector)
 
 
 def get_bond_features(bond: Chem.Bond, use_stereochemistry: bool = True) -> np.ndarray:
-    """
-    Takes an RDKit bond object as input and gives a 1D numpy array of bond features as output.
+    """Compute a 1D array of bond features from an RDKit bond.
 
     Args:
-        bond (Chem.Bond): The RDKit bond object to extract features from.
-        use_stereochemistry (bool, optional): Specifies whether to include stereochemistry features.
-            Defaults to True.
+        bond (Chem.Bond): RDKit bond.
+        use_stereochemistry (bool, optional): Include stereo flags (E/Z/any/none).
+            Defaults to ``True``.
 
     Returns:
-        np.ndarray: A 1D numpy array of bond features.
+        np.ndarray: Bond feature vector.
     """
     permitted_list_of_bond_types = [
         Chem.rdchem.BondType.SINGLE,
@@ -442,9 +320,7 @@ def get_bond_features(bond: Chem.Bond, use_stereochemistry: bool = True) -> np.n
     ]
 
     bond_type_enc = one_hot_encoding(bond.GetBondType(), permitted_list_of_bond_types)
-
     bond_is_conj_enc = [int(bond.GetIsConjugated())]
-
     bond_is_in_ring_enc = [int(bond.IsInRing())]
 
     bond_feature_vector = bond_type_enc + bond_is_conj_enc + bond_is_in_ring_enc
@@ -458,32 +334,41 @@ def get_bond_features(bond: Chem.Bond, use_stereochemistry: bool = True) -> np.n
     return np.array(bond_feature_vector)
 
 
-def get_gnn_encodings(mol):
-    # Generate adjacency matrix
-    adjacency_matrix = Chem.GetAdjacencyMatrix(mol)
+def get_gnn_encodings(mol: Chem.Mol) -> np.ndarray:
+    """Compute Gaussian Network Model–style encodings (inverse Kirchhoff).
 
-    # Convert adjacency matrix to numpy array
+    Constructs the adjacency matrix, degree matrix, Laplacian (Kirchhoff) matrix,
+    then returns its pseudoinverse.
+
+    Args:
+        mol (Chem.Mol): Input molecule.
+
+    Returns:
+        np.ndarray: Pseudoinverse of the Kirchhoff matrix with shape ``[N, N]``.
+    """
+    adjacency_matrix = GetAdjacencyMatrix(mol)
     adjacency_np = np.array(adjacency_matrix)
-
-    # Calculate the degree matrix
     degree_matrix = np.diag(np.sum(adjacency_np, axis=1))
-
-    # Calculate the Laplacian matrix (Kirchhoff matrix)
     kirchhoff_matrix = degree_matrix - adjacency_np
-
-    # Calculate the inverse of the Kirchhoff matrix
     inv_kirchhoff_matrix = pinv(kirchhoff_matrix)
-
     return inv_kirchhoff_matrix
 
 
-# New helper: normalize a single label entry to a 1D float array (allows missing)
-def _to_float_sequence(y_val: Union[float, int, Sequence[Optional[float]], np.ndarray]) -> np.ndarray:
-    """
-    Convert a per-sample label into a 1D float array.
-      - Single numeric -> shape (1,)
-      - Sequence/array -> shape (T,)
-    Missing entries can be None/np.nan; they remain np.nan for masking later.
+def _to_float_sequence(
+    y_val: Union[float, int, Sequence[Optional[float]], np.ndarray]
+) -> np.ndarray:
+    """Convert a per-sample label into a 1D float array.
+
+    * Single numeric -> shape ``(1,)``
+    * Sequence/array -> shape ``(T,)``
+
+    ``None``/``np.nan`` values are kept as ``np.nan`` for later masking.
+
+    Args:
+        y_val (Union[float, int, Sequence[Optional[float]], np.ndarray]): Label(s).
+
+    Returns:
+        np.ndarray: 1D array of dtype ``float32``.
     """
     if isinstance(y_val, (float, int, np.floating, np.integer)):
         return np.array([float(y_val)], dtype=np.float32)
@@ -498,37 +383,39 @@ def get_tensor_data(
     y: List[Union[float, int, Sequence[Optional[float]], np.ndarray]],
     gnn: bool = True,
     pe: bool = True,
-    pe_dim: int = 6
+    pe_dim: int = 6,
 ) -> List[Data]:
-    """
-    Constructs labeled molecular graphs (torch_geometric.data.Data) using SMILES strings
-    and associated labels. Supports single-task (scalar per sample) and multi-task
-    (sequence per sample) targets. Missing task labels can be None or np.nan; a mask
-    `y_mask` (1.0=present, 0.0=missing) is included in each Data object.
+    """Build torch_geometric molecular graphs with labels and masks.
+
+    Each sample is constructed from a SMILES string and a label (single- or multi-task).
+    Missing task labels can be ``None``/``np.nan``; a mask ``y_mask`` (1.0=present,
+    0.0=missing) is included per sample.
 
     Args:
         x_smiles (List[str]): SMILES strings.
-        y (List[...]): Per-sample labels; each item can be:
-                       - single float/int (single-task), or
-                       - sequence/array of floats (multi-task). Missing allowed via None/np.nan.
-        gnn (bool): Use Gaussian Network Model style positional encoding features.
-        pe (bool): Include positional encodings (graph signal) in Data.pe.
-        pe_dim (int): Number of PE dimensions to keep.
+        y (List[Union[float, int, Sequence[Optional[float]], np.ndarray]]): Per-sample labels:
+            single float/int (single-task) or a sequence/array (multi-task).
+        gnn (bool, optional): If True, append GNN-style diagonal terms to node features.
+            Defaults to ``True``.
+        pe (bool, optional): If True, include positional encodings in ``Data.pe``.
+            Defaults to ``True``.
+        pe_dim (int, optional): Number of PE dimensions to keep. Defaults to ``6``.
 
     Returns:
-        List[Data]: Each Data has fields:
-            - x, edge_index, edge_attr, pe
-            - y:       shape [num_tasks]
-            - y_mask:  shape [num_tasks] with 1 where label present, 0 where missing
+        List[Data]: One ``Data`` per sample with fields:
+            - ``x`` (torch.FloatTensor): Node features ``[N, F]``.
+            - ``edge_index`` (torch.LongTensor): COO edges ``[2, E]``.
+            - ``edge_attr`` (torch.FloatTensor): Edge features ``[E, D]``.
+            - ``pe`` (torch.FloatTensor | None): Positional encodings ``[N, pe_dim]`` if ``pe=True``.
+            - ``y`` (torch.FloatTensor): Task targets ``[T]``.
+            - ``y_mask`` (torch.FloatTensor): Mask ``[T]`` (1=present, 0=missing).
     """
     data_list: List[Data] = []
 
     for smiles, y_val in tqdm(zip(x_smiles, y), total=len(x_smiles), desc="Processing data"):
         # Parse SMILES
         mol = Chem.MolFromSmiles(smiles)
-
         Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
-
         if mol is None:
             raise ValueError(f"RDKit failed to parse SMILES: {smiles}")
 
@@ -565,7 +452,7 @@ def get_tensor_data(
         edge_attr = torch.as_tensor(np.asarray(edge_attr_feat), dtype=torch.float)
 
         # Labels (multi-task friendly)
-        y_arr = _to_float_sequence(y_val)              # [T]
+        y_arr = _to_float_sequence(y_val)  # [T]
         y_mask_arr = np.isfinite(y_arr).astype(np.float32)
         y_tensor = torch.as_tensor(y_arr, dtype=torch.float)
         y_mask_tensor = torch.as_tensor(y_mask_arr, dtype=torch.float)

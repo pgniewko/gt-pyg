@@ -102,7 +102,6 @@ Additional implementation notes:
 - Some utility code is adapted from the [`TransformerConv`](https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/conv/transformer_conv.py) module.  
 - For converting SMILES strings, consider using [`from_smiles`](https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.from_smiles).  
 - For simplicity, small datasets are handled as lists of `Data` objects without defining a custom `Dataset` class.  
-- The test loss is computed using [TorchMetrics](https://sebastianraschka.com/blog/2022/torchmetrics.html).  
 - The implementation follows a **Post-Normalization** Transformer setup for clarity and stability.
 
 ---
