@@ -2,7 +2,7 @@
 > The code is under development, so make sure you are using the most recent version.  
 > We welcome bug reports and PRs but make no guarantees about fixes or responses.
 
-# DESCRIPTION
+## DESCRIPTION
 
 `gt_pyg` is an implementation of the **Graph Transformer Architecture** in [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/).
 
@@ -18,7 +18,7 @@ This figure illustrates the **gating mechanism** used in the GT model (Chen et a
 
 ---
 
-# INSTALL
+## INSTALL
 
 Clone and install the software:
 ```bash
@@ -34,7 +34,7 @@ conda activate gt
 
 ---
 
-# USAGE
+## USAGE
 
 The following code snippet demonstrates how to test the installation of `gt-pyg` and use the `GTConv` layer:
 
@@ -78,42 +78,80 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 ---
 
-# IMPLEMENTATION NOTES
+## Implementation Notes
 
-This implementation integrates design principles from two key works:
+This implementation combines design ideas from **graph transformers**
+and **modern deep transformer stabilization techniques**, integrating
+the core principles of the original Graph Transformer with contemporary
+training improvements.
 
-1. **A Generalization of Transformer Networks to Graphs**  
-   *(Dwivedi & Bresson, 2021)*  
-   The Graph Transformer architecture extends self-attention to structured graph inputs,  
-   using relational and topological context to modulate attention weights.  
-   The current implementation replicates the original `GTConv` layer as closely as possible,  
-   leveraging PyTorch Geometric’s efficient message passing API.  
-   - The `softmask` function operates safely without clipping, as PyG’s `softmax` uses the Log-Sum-Exp trick.  
-   - Aggregation defaults to `sum`, though multiple aggregators (as in PNA) can be used for richer expressiveness.  
-   - Biases in the attention mechanism are set to `False` by default for stability.
+### 1. A Generalization of Transformer Networks to Graphs
 
-2. **A Gated Graph Transformer for Protein Complex Structure Quality Assessment and its Performance in CASP15**  
-   *(Chen et al., 2023, *Bioinformatics*)*  
-   Introduces gating mechanisms that dynamically modulate attention flow.  
-   This code includes the gating mechanism to improve the representational capacity of GT layers.  
-   To reproduce the original GT model, set `qkv_bias=True` and `gate=False`.
+*Dwivedi & Bresson, 2021*
+The Graph Transformer extends self-attention to structured graph inputs
+by incorporating relational and topological context into attention
+computation.
+This implementation closely follows that design while leveraging PyTorch
+Geometric's efficient message-passing API.
 
-Additional implementation notes:
-- Some utility code is adapted from the [`TransformerConv`](https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/conv/transformer_conv.py) module.  
-- For converting SMILES strings, consider using [`from_smiles`](https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.from_smiles).  
-- For simplicity, small datasets are handled as lists of `Data` objects without defining a custom `Dataset` class.  
-- The implementation follows a **Post-Normalization** Transformer setup for clarity and stability.
+-   Uses PyG's numerically stable `softmax`, which applies the
+    Log-Sum-Exp trick to avoid overflow.
+-   Supports multiple aggregators (`"sum"`, `"mean"`, `"max"`, `"std"`,
+    etc.) via `MultiAggregation` for richer expressiveness, similar to
+    PNA.
+-   Disables `qkv_bias` by default for stability and reproducibility.
+-   Adds **attention dropout (`attn_dropout`)** to regularize attention
+    coefficients directly.
 
----
+### 2. A Gated Graph Transformer for Protein Complex Structure Quality Assessment
 
-# REFERENCES
+*Chen et al., 2023, Bioinformatics*
+Introduces gating mechanisms that modulate information flow through both
+nodes and edges.
+This implementation optionally includes the same gating logic
+(`gate=True`) to enhance representational power.
+To reproduce the original (ungated) Graph Transformer, set
+`qkv_bias=True` and `gate=False`.
+
+------------------------------------------------------------------------
+
+### Implementation Foundations
+
+-   Certain patterns and initialization schemes are adapted from
+    [`TransformerConv`](https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/conv/transformer_conv.py).
+-   The design remains fully compatible with PyG's `propagate` API,
+    `Data`, and `Batch` abstractions.
+-   For SMILES graph conversion, use
+    [`torch_geometric.utils.from_smiles`](https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.from_smiles).
+-   Small datasets are handled as in-memory lists of `Data` objects,
+    avoiding custom dataset definitions.
+
+------------------------------------------------------------------------
+
+### Summary
+
+This implementation remains faithful to the **Graph Transformer**
+paradigm but enhances it with: 
+- Attention and residual regularization
+(`attn_dropout`, `drop_path`)
+- Pre-Norm stability for deep architectures
+- Optional edge updates for efficiency
+- Zero-initialized projections for smoother optimization
+
+Together, these refinements make the `GTConv` layer more stable,
+scalable, and flexible for both molecular and general graph learning
+tasks.
+
+--- 
+
+## REFERENCES
 
 1. [A Generalization of Transformer Networks to Graphs](https://arxiv.org/abs/2012.09699)  
 2. [A Gated Graph Transformer for Protein Complex Structure Quality Assessment and Its Performance in CASP15](https://academic.oup.com/bioinformatics/article/39/Supplement_1/i308/7210460)
 
 ---
 
-# COPYRIGHT NOTICE
+## COPYRIGHT NOTICE
 
 Copyright (C) 2023–  
 **Pawel Gniewek**  
