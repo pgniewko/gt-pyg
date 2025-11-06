@@ -80,9 +80,7 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 ## Implementation Notes
 
-This implementation combines design ideas from **graph transformers**
-and **modern deep transformer stabilization techniques**, integrating
-the core principles of the original Graph Transformer.
+This implementation integrates the core principles of the  original **Graph Transformer**.
 
 ### 1. A Generalization of Transformer Networks to Graphs
 
