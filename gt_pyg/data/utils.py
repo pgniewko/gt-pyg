@@ -64,7 +64,6 @@ def clean_df(
         pd.DataFrame: Cleaned table with columns ``[x_label, y_label]``.
     """
 
-    # --- Helpers ---
     def to_mol(smi: str):
         if not isinstance(smi, str):
             return None
@@ -99,11 +98,9 @@ def clean_df(
             return ""
         return Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)
 
-    # --- Quiet RDKit noise ---
     for log_level in RDLogger._levels:
         rdBase.DisableLog(log_level)
 
-    # --- Work on a copy ---
     df = df.copy()
 
     # Convert SMILES -> Mol and drop invalids
