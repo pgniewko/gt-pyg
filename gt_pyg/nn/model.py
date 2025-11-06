@@ -1,14 +1,10 @@
-# Standard
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
-# Third party
 import torch
-from torch import nn
-from torch import Tensor
+from torch import nn, Tensor
 from torch_geometric.data import Batch
 from torch_geometric.nn.aggr import MultiAggregation
 
-# GT-PyG
 from .gt_conv import GTConv
 from .mlp import MLP
 
@@ -29,59 +25,40 @@ class GraphTransformerNet(nn.Module):
         pe_in_dim: Optional[int] = None,
         hidden_dim: int = 128,
         norm: str = "bn",
-        gate=False,
-        qkv_bias=False,
+        gate: bool = False,
+        qkv_bias: bool = False,
         num_gt_layers: int = 4,
         num_heads: int = 8,
         gt_aggregators: List[str] = ["sum"],
         aggregators: List[str] = ["sum"],
         act: str = "relu",
         dropout: float = 0.0,
-    ):
-        """
-        Args:
-            node_dim_in (int): Dimension of input node features.
-            edge_dim_in (int, optional): Dimension of input edge features.
-                                         Default is None.
-            pe_in_dim (int, optional): Dimension of positional encoding input.
-                                       Default is None.
-            hidden_dim (int, optional): Dimension of hidden layers.
-                                        Default is 128.
-            gate (bool, optional): Use a gate attantion mechanism.
-                                   Default is False
-            qkv_bias (bool, optional): Bias in the attention mechanism.
-                                       Default is False
-            norm (str, optional): Normalization method.
-                                  Default is "bn" (batch norm).
-            num_gt_layers (int, optional): Number of Graph Transformer layers.
-                                           Default is 4.
-            num_heads (int, optional): Number of attention heads. Default is 8.
-            gt_aggregators (List[str], optional): Aggregation methods for the messages aggregation.
-                                           Default is ["sum"].
-            aggregators (List[str], optional): Aggregation methods for global pooling.
-                                               Default is ["sum"].
-            act (str, optional): Activation function.
-                                 Default is "relu".
-            dropout (float, optional): Dropout probability.
-                                       Default is 0.0.
-        """
+        num_tasks: int = 1,
+    ) -> None:
+        super().__init__()
 
-        super(GraphTransformerNet, self).__init__()
+        if num_tasks <= 0:
+            raise ValueError("num_tasks must be >= 1")
+        self.num_tasks = int(num_tasks)
 
+        # Embeddings
         self.node_emb = nn.Linear(node_dim_in, hidden_dim, bias=False)
-        if edge_dim_in:
+
+        self.edge_emb: Optional[nn.Linear]
+        if edge_dim_in is not None:
             self.edge_emb = nn.Linear(edge_dim_in, hidden_dim, bias=False)
         else:
-            self.edge_emb = self.register_parameter("edge_emb", None)
+            self.edge_emb = None
 
-        if pe_in_dim:
+        self.pe_emb: Optional[nn.Linear]
+        if pe_in_dim is not None:
             self.pe_emb = nn.Linear(pe_in_dim, hidden_dim, bias=False)
         else:
-            self.pe_emb = self.register_parameter("pe_emb", None)
+            self.pe_emb = None
 
-        self.gt_layers = nn.ModuleList()
-        for _ in range(num_gt_layers):
-            self.gt_layers.append(
+        # Graph Transformer layers
+        self.gt_layers = nn.ModuleList(
+            [
                 GTConv(
                     node_in_dim=hidden_dim,
                     hidden_dim=hidden_dim,
@@ -89,42 +66,46 @@ class GraphTransformerNet(nn.Module):
                     num_heads=num_heads,
                     act=act,
                     dropout=dropout,
-                    norm="bn",
+                    norm=norm,
                     gate=gate,
                     qkv_bias=qkv_bias,
                     aggregators=gt_aggregators,
                 )
-            )
+                for _ in range(num_gt_layers)
+            ]
+        )
 
+        # Global pooling and heads
         self.global_pool = MultiAggregation(aggregators, mode="cat")
-
         num_aggrs = len(aggregators)
+        head_in_dim = num_aggrs * hidden_dim
+
         self.mu_mlp = MLP(
-            input_dim=num_aggrs * hidden_dim,
-            output_dim=1,
+            input_dim=head_in_dim,
+            output_dim=self.num_tasks,
             hidden_dims=hidden_dim,
             num_hidden_layers=1,
             dropout=0.0,
             act=act,
         )
         self.log_var_mlp = MLP(
-            input_dim=num_aggrs * hidden_dim,
-            output_dim=1,
+            input_dim=head_in_dim,
+            output_dim=self.num_tasks,
             hidden_dims=hidden_dim,
             num_hidden_layers=1,
             dropout=0.0,
             act=act,
         )
 
+        # Initialize everything
         self.reset_parameters()
 
-    def reset_parameters(self):
+    def reset_parameters(self) -> None:
         """
-        Reset the embedding parameters of the model using Xavier uniform initialization.
+        Re-initialize parameters.
 
-        Note: The input and the output of the embedding layers does not pass through the activation layer,
-              so the variance estimation differs by a factor of two from the default
-              kaiming_uniform initialization.
+        Embedding layers use Xavier uniform (they're added directly, no nonlinearity).
+        GTConv layers and MLP heads are reset via their own `reset_parameters` if present.
         """
         nn.init.xavier_uniform_(self.node_emb.weight)
         if self.edge_emb is not None:
@@ -132,61 +113,71 @@ class GraphTransformerNet(nn.Module):
         if self.pe_emb is not None:
             nn.init.xavier_uniform_(self.pe_emb.weight)
 
+        # Propagate to children with their own reset
+        for m in self.gt_layers:
+            if hasattr(m, "reset_parameters"):
+                m.reset_parameters()
+        if hasattr(self.mu_mlp, "reset_parameters"):
+            self.mu_mlp.reset_parameters()
+        if hasattr(self.log_var_mlp, "reset_parameters"):
+            self.log_var_mlp.reset_parameters()
+
+    @torch.no_grad()
+    def num_parameters(self) -> int:
+        """Return the number of trainable parameters."""
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
     def forward(
         self,
         x: Tensor,
         edge_index: Tensor,
-        edge_attr: Tensor,
-        pe: Tensor,
+        edge_attr: Optional[Tensor],
+        pe: Optional[Tensor],
         batch: Batch,
         zero_var: bool = False,
-    ) -> Tensor:
+    ) -> Tuple[Tensor, Tensor]:
         """
         Forward pass of the Graph Transformer Network.
 
         Args:
-            x (Tensor): Input node features.
-            edge_index (Tensor): Graph edge indices.
-            edge_attr (Tensor): Edge features.
-            pe (Tensor): Positional encoding.
-            batch (Batch): Batch indices.
-            zero_var (bool, optional): Flag to zero out the log variance.
-                                       Default is False.
-
+            x: Node features [num_nodes, node_dim_in].
+            edge_index: Edge indices [2, num_edges].
+            edge_attr: Edge features [num_edges, edge_dim_in] if provided (required if edge_dim_in was set).
+            pe: Positional encodings [num_nodes, pe_in_dim] if provided (required if pe_in_dim was set).
+            batch: Batch vector.
+            zero_var (bool): If True, do NOT sample; return deterministic mu.
+                             (Variance is still predicted and returned via log_var.)
         Returns:
-            Tensor: The output of the forward pass.
+            Tuple[Tensor, Tensor]: (prediction, log_var)
+                - prediction: shape [batch_size, num_tasks]; mu if zero_var=True or not training,
+                              otherwise a reparameterized sample
+                - log_var:   shape [batch_size, num_tasks]; predicted log(variance) per task
         """
-
         x = self.node_emb(x)
+
         if self.pe_emb is not None:
+            if pe is None:
+                raise ValueError("pe_in_dim was set in __init__, but 'pe' is None in forward().")
             x = x + self.pe_emb(pe)
+
         if self.edge_emb is not None:
+            if edge_attr is None:
+                raise ValueError("edge_dim_in was set in __init__, but 'edge_attr' is None in forward().")
             edge_attr = self.edge_emb(edge_attr)
 
         for gt_layer in self.gt_layers:
-            (x, edge_attr) = gt_layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
+            x, edge_attr = gt_layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
         x = self.global_pool(x, batch)
-        mu = self.mu_mlp(x)
-        log_var = self.log_var_mlp(x)
-        if zero_var:
-            std = torch.zeros_like(log_var)
-        else:
-            std = torch.exp(0.5 * log_var)
+        mu = self.mu_mlp(x)                  # [B, T]
+        log_var = self.log_var_mlp(x)        # [B, T]
+        std = torch.exp(0.5 * log_var)       # [B, T]
 
-        if self.training:
+        if self.training and not zero_var:
             eps = torch.randn_like(std)
-            return mu + std * eps, std
+            pred = mu + std * eps            # sample: [B, T]
         else:
-            return mu, std
+            pred = mu                        # deterministic mean: [B, T]
 
-    def num_parameters(self) -> int:
-        """
-        Calculate the total number of trainable parameters in the model.
+        return pred, log_var
 
-        Returns:
-            int: The total number of trainable parameters.
-        """
-        trainable_params = filter(lambda p: p.requires_grad, self.parameters())
-        count = sum([p.numel() for p in trainable_params])
-        return count
