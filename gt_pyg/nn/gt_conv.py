@@ -128,17 +128,88 @@ class GTConv(MessagePassing):
 
     def reset_parameters(self):
         """
-        Note: The output of the Q-K-V layers does not pass through the activation layer (as opposed to the input),
-              so the variance estimation should differ by a factor of two from the default
-              kaiming_uniform initialization.
+        Initialize all learnable parameters.
+
+        - Linear layers use Xavier uniform on weights and zeros on biases.
+        - Norm layers are reset to weight=1, bias=0 (and BN running stats reset).
+        - Submodules with `reset_parameters` are recursively reset.
         """
+        # Q, K, V, O
         nn.init.xavier_uniform_(self.WQ.weight)
+        if self.WQ.bias is not None:
+            nn.init.zeros_(self.WQ.bias)
+
         nn.init.xavier_uniform_(self.WK.weight)
+        if self.WK.bias is not None:
+            nn.init.zeros_(self.WK.bias)
+
         nn.init.xavier_uniform_(self.WV.weight)
+        if self.WV.bias is not None:
+            nn.init.zeros_(self.WV.bias)
+
         nn.init.xavier_uniform_(self.WO.weight)
+        if self.WO.bias is not None:
+            nn.init.zeros_(self.WO.bias)
+
+        # Edge-related linears (if present)
         if self.edge_in_dim is not None:
             nn.init.xavier_uniform_(self.WE.weight)
+            if self.WE.bias is not None:
+                nn.init.zeros_(self.WE.bias)
+
             nn.init.xavier_uniform_(self.WOe.weight)
+            if self.WOe.bias is not None:
+                nn.init.zeros_(self.WOe.bias)
+
+        # Gate linears (if present)
+        if self.gate and self.n_gate is not None:
+            nn.init.xavier_uniform_(self.n_gate.weight)
+            if self.n_gate.bias is not None:
+                nn.init.zeros_(self.n_gate.bias)
+        if self.gate and self.e_gate is not None:
+            nn.init.xavier_uniform_(self.e_gate.weight)
+            if self.e_gate.bias is not None:
+                nn.init.zeros_(self.e_gate.bias)
+
+        # Norm layers
+        if isinstance(self.norm1, nn.BatchNorm1d):
+            self.norm1.reset_running_stats()
+            nn.init.ones_(self.norm1.weight)
+            nn.init.zeros_(self.norm1.bias)
+        elif isinstance(self.norm1, nn.LayerNorm):
+            nn.init.ones_(self.norm1.weight)
+            nn.init.zeros_(self.norm1.bias)
+
+        if isinstance(self.norm2, nn.BatchNorm1d):
+            self.norm2.reset_running_stats()
+            nn.init.ones_(self.norm2.weight)
+            nn.init.zeros_(self.norm2.bias)
+        elif isinstance(self.norm2, nn.LayerNorm):
+            nn.init.ones_(self.norm2.weight)
+            nn.init.zeros_(self.norm2.bias)
+
+        if self.edge_in_dim is not None:
+            if isinstance(self.norm1e, nn.BatchNorm1d):
+                self.norm1e.reset_running_stats()
+                nn.init.ones_(self.norm1e.weight)
+                nn.init.zeros_(self.norm1e.bias)
+            elif isinstance(self.norm1e, nn.LayerNorm):
+                nn.init.ones_(self.norm1e.weight)
+                nn.init.zeros_(self.norm1e.bias)
+
+            if isinstance(self.norm2e, nn.BatchNorm1d):
+                self.norm2e.reset_running_stats()
+                nn.init.ones_(self.norm2e.weight)
+                nn.init.zeros_(self.norm2e.bias)
+            elif isinstance(self.norm2e, nn.LayerNorm):
+                nn.init.ones_(self.norm2e.weight)
+                nn.init.zeros_(self.norm2e.bias)
+
+        # Submodules (FFNs)
+        if hasattr(self.ffn, "reset_parameters"):
+            self.ffn.reset_parameters()
+        if self.edge_in_dim is not None and hasattr(self.ffn_e, "reset_parameters"):
+            self.ffn_e.reset_parameters()
 
     def forward(self, x, edge_index, edge_attr=None):
         x_ = x
@@ -223,3 +294,4 @@ class GTConv(MessagePassing):
             f"qkv_bias: {self.qkv_bias}, "
             f"gate: {self.gate})"
         )
+
