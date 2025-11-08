@@ -8,7 +8,7 @@ import pandas as pd
 import torch
 from numpy.linalg import pinv
 from rdkit import Chem, RDLogger, rdBase
-from rdkit.Chem import SaltRemover
+from rdkit.Chem.SaltRemover import SaltRemover
 from rdkit.Chem.rdmolops import GetAdjacencyMatrix
 from torch_geometric.data import Data
 from tqdm.auto import tqdm
