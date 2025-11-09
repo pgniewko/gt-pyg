@@ -80,7 +80,7 @@ def clean_smiles_openadmet(
                 atom.SetFormalCharge(0)
                 atom.SetNumExplicitHs(hcount - chg)
                 atom.UpdatePropertyCache()
-        out_smi = Chem.MolToSmiles(mol, kekuleSmiles=True)  # this also canonicalizes the input
+        out_smi = Chem.MolToSmiles(mol, kekuleSmiles=True, isomericSmiles=True)
         assert len(out_smi) > 0, f"Could not convert molecule to SMILES {smiles}"
         return out_smi
     except Exception as e:
