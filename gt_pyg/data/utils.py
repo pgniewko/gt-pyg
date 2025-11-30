@@ -1,6 +1,6 @@
 # Standard library
 import logging
-from typing import List, Optional, Sequence, Union
+from typing import List, Optional, Sequence, Union, Dict, Any
 
 # Third-party
 import numpy as np
@@ -15,6 +15,18 @@ from tqdm.auto import tqdm
 
 
 __SMILES = "c1ccccc1"
+
+# -----------------------------
+# Global category constants
+# -----------------------------
+RING_COUNT_CATEGORIES = [0, 1, 2, 3, "MoreThanThree"]
+RING_SIZE_CATEGORIES = [3, 4, 5, 6, 7, 8, 9, 10, "MoreThanTen"]
+PERIOD_CATEGORIES = [1, 2, 3, 4, 5, 6, 7]
+# 0 is used for "no group / undefined" (e.g. some f-block elements if RDKit returns 0)
+GROUP_CATEGORIES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+
+# Use RDKit's periodic table helper
+PERIODIC_TABLE = Chem.GetPeriodicTable()
 
 
 def get_node_dim() -> int:
@@ -86,6 +98,7 @@ def clean_smiles_openadmet(
     except Exception as e:
         print(f"Failed to clean SMILES {smiles} due to {e}")
         return None
+
 
 def clean_df(
     df: pd.DataFrame,
@@ -235,14 +248,14 @@ def get_data_from_csv(
     )
 
 
-def one_hot_encoding(x: str, permitted_list: List[str]) -> List[int]:
+def one_hot_encoding(x, permitted_list: List) -> List[int]:
     """Return a one-hot encoding for ``x`` over a permitted vocabulary.
 
     Any ``x`` not in ``permitted_list`` is mapped to the last element.
 
     Args:
-        x (str): Input token/value.
-        permitted_list (List[str]): Allowed vocabulary.
+        x: Input token/value (str/int/etc.).
+        permitted_list (List): Allowed vocabulary.
 
     Returns:
         List[int]: One-hot vector of length ``len(permitted_list)``.
@@ -287,18 +300,140 @@ def get_pe(mol: Chem.Mol, pe_dim: int = 6, normalized: bool = True) -> np.ndarra
     return vec[:, 1:M]
 
 
+def get_period(atomic_num: int) -> int:
+    """Map atomic number to periodic table period (row) via RDKit."""
+    try:
+        return int(PERIODIC_TABLE.GetPeriod(atomic_num))
+    except Exception:
+        # Fallback: clamp into [1, 7]
+        return max(1, min(7, atomic_num // 18 + 1))
+
+
+def get_group(atomic_num: int) -> int:
+    """Map atomic number to periodic table group (column) via RDKit.
+
+    For lanthanides/actinides or undefined, RDKit may return 0.
+    """
+    try:
+        col = int(PERIODIC_TABLE.GetColumn(atomic_num))
+    except Exception:
+        col = 0
+    if col is None:
+        col = 0
+    return col
+
+
+def get_ring_membership_stats(
+    mol: Chem.Mol,
+) -> (Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]]):
+    """Precompute ring membership statistics for atoms and bonds.
+
+    Returns:
+        atom_ring_stats: dict[atom_idx] -> {
+            'count': int,
+            'min_size': Optional[int],
+            'max_size': Optional[int],
+            'has_aromatic': bool,
+            'has_non_aromatic': bool,
+        }
+        bond_ring_stats: dict[bond_idx] -> same structure
+    """
+    ring_info = mol.GetRingInfo()
+    atom_rings = ring_info.AtomRings()  # tuple of tuples of atom indices
+    bond_rings = ring_info.BondRings()  # tuple of tuples of bond indices
+
+    num_atoms = mol.GetNumAtoms()
+    num_bonds = mol.GetNumBonds()
+
+    atom_ring_stats: Dict[int, Dict[str, Any]] = {
+        i: {
+            "count": 0,
+            "min_size": None,
+            "max_size": None,
+            "has_aromatic": False,
+            "has_non_aromatic": False,
+        }
+        for i in range(num_atoms)
+    }
+
+    bond_ring_stats: Dict[int, Dict[str, Any]] = {
+        i: {
+            "count": 0,
+            "min_size": None,
+            "max_size": None,
+            "has_aromatic": False,
+            "has_non_aromatic": False,
+        }
+        for i in range(num_bonds)
+    }
+
+    # RDKit guarantees AtomRings and BondRings correspond ring-by-ring
+    for atom_ring, bond_ring in zip(atom_rings, bond_rings):
+        size = len(atom_ring)
+
+        # Define a ring as aromatic if ALL its bonds are aromatic
+        is_aromatic_ring = True
+        for b_idx in bond_ring:
+            if not mol.GetBondWithIdx(b_idx).GetIsAromatic():
+                is_aromatic_ring = False
+                break
+
+        # Update atom stats
+        for a_idx in atom_ring:
+            st = atom_ring_stats[a_idx]
+            st["count"] += 1
+            if st["min_size"] is None or size < st["min_size"]:
+                st["min_size"] = size
+            if st["max_size"] is None or size > st["max_size"]:
+                st["max_size"] = size
+            if is_aromatic_ring:
+                st["has_aromatic"] = True
+            else:
+                st["has_non_aromatic"] = True
+
+        # Update bond stats
+        for b_idx in bond_ring:
+            st = bond_ring_stats[b_idx]
+            st["count"] += 1
+            if st["min_size"] is None or size < st["min_size"]:
+                st["min_size"] = size
+            if st["max_size"] is None or size > st["max_size"]:
+                st["max_size"] = size
+            if is_aromatic_ring:
+                st["has_aromatic"] = True
+            else:
+                st["has_non_aromatic"] = True
+
+    return atom_ring_stats, bond_ring_stats
+
+
 def get_atom_features(
     atom: Chem.Atom,
     use_chirality: bool = True,
     hydrogens_implicit: bool = True,
+    atom_ring_stats: Optional[Dict[int, Dict[str, Any]]] = None,
 ) -> np.ndarray:
     """Compute a 1D array of atom features from an RDKit atom.
+
+    Includes:
+        - Element, degree, formal charge, hybridization
+        - In-ring flag, aromatic flag
+        - Atomic number (scalar)
+        - Period (row) one-hot
+        - Group / column one-hot
+        - Ring membership statistics if provided:
+            - ring count (one-hot)
+            - min ring size (one-hot)
+            - max ring size (one-hot)
+            - in any aromatic ring (0/1)
+            - in any non-aromatic ring (0/1)
 
     Args:
         atom (Chem.Atom): RDKit atom.
         use_chirality (bool, optional): Include chirality (R/S, chiral tag). Defaults to ``True``.
         hydrogens_implicit (bool, optional): Include implicit hydrogen count features.
             Defaults to ``True``.
+        atom_ring_stats (dict, optional): Precomputed ring stats for atoms.
 
     Returns:
         np.ndarray: Atom feature vector.
@@ -313,8 +448,12 @@ def get_atom_features(
         permitted_list_of_atoms = ["H"] + permitted_list_of_atoms
 
     atom_type_enc = one_hot_encoding(str(atom.GetSymbol()), permitted_list_of_atoms)
-    n_heavy_neighbors_enc = one_hot_encoding(int(atom.GetDegree()), [0, 1, 2, 3, 4, "MoreThanFour"])
-    formal_charge_enc = one_hot_encoding(int(atom.GetFormalCharge()), [-3, -2, -1, 0, 1, 2, 3, "Extreme"])
+    n_heavy_neighbors_enc = one_hot_encoding(
+        int(atom.GetDegree()), [0, 1, 2, 3, 4, "MoreThanFour"]
+    )
+    formal_charge_enc = one_hot_encoding(
+        int(atom.GetFormalCharge()), [-3, -2, -1, 0, 1, 2, 3, "Extreme"]
+    )
     hybridisation_type_enc = one_hot_encoding(
         str(atom.GetHybridization()), ["S", "SP", "SP2", "SP3", "SP3D", "SP3D2", "OTHER"]
     )
@@ -330,6 +469,18 @@ def get_atom_features(
         + is_aromatic_enc
     )
 
+    # Atomic number, period, and group (column)
+    atomic_num = atom.GetAtomicNum()
+    atom_feature_vector += [float(atomic_num)]
+
+    period = get_period(atomic_num)
+    period_enc = one_hot_encoding(period, PERIOD_CATEGORIES)
+    atom_feature_vector += period_enc
+
+    group = get_group(atomic_num)  # may be 0 for undefined
+    group_enc = one_hot_encoding(group, GROUP_CATEGORIES)
+    atom_feature_vector += group_enc
+
     if use_chirality:
         chirality_type_enc = one_hot_encoding(
             str(atom.GetChiralTag()),
@@ -343,19 +494,76 @@ def get_atom_features(
         atom_feature_vector += cip_enc
 
     if hydrogens_implicit:
-        n_hydrogens_enc = one_hot_encoding(int(atom.GetTotalNumHs()), [0, 1, 2, 3, 4, "MoreThanFour"])
+        n_hydrogens_enc = one_hot_encoding(
+            int(atom.GetTotalNumHs()), [0, 1, 2, 3, 4, "MoreThanFour"]
+        )
         atom_feature_vector += n_hydrogens_enc
+
+    # Ring membership statistics
+    # Only if precomputed stats are provided; otherwise, all zeros
+    ring_count_enc = [0] * len(RING_COUNT_CATEGORIES)
+    min_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
+    max_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
+    in_any_aromatic_ring = 0
+    in_any_non_aromatic_ring = 0
+
+    if atom_ring_stats is not None:
+        idx = atom.GetIdx()
+        stats = atom_ring_stats.get(idx)
+        if stats is not None:
+            # Ring count
+            count_val = stats["count"]
+            if count_val > 3:
+                count_val = "MoreThanThree"
+            ring_count_enc = one_hot_encoding(count_val, RING_COUNT_CATEGORIES)
+
+            # Min ring size
+            if stats["min_size"] is not None:
+                min_size_val = stats["min_size"]
+                if min_size_val > 10:
+                    min_size_val = "MoreThanTen"
+                min_ring_size_enc = one_hot_encoding(min_size_val, RING_SIZE_CATEGORIES)
+
+            # Max ring size
+            if stats["max_size"] is not None:
+                max_size_val = stats["max_size"]
+                if max_size_val > 10:
+                    max_size_val = "MoreThanTen"
+                max_ring_size_enc = one_hot_encoding(max_size_val, RING_SIZE_CATEGORIES)
+
+            in_any_aromatic_ring = int(stats["has_aromatic"])
+            in_any_non_aromatic_ring = int(stats["has_non_aromatic"])
+
+    atom_feature_vector += ring_count_enc
+    atom_feature_vector += min_ring_size_enc
+    atom_feature_vector += max_ring_size_enc
+    atom_feature_vector += [in_any_aromatic_ring, in_any_non_aromatic_ring]
 
     return np.array(atom_feature_vector)
 
 
-def get_bond_features(bond: Chem.Bond, use_stereochemistry: bool = True) -> np.ndarray:
+def get_bond_features(
+    bond: Chem.Bond,
+    use_stereochemistry: bool = True,
+    bond_ring_stats: Optional[Dict[int, Dict[str, Any]]] = None,
+) -> np.ndarray:
     """Compute a 1D array of bond features from an RDKit bond.
+
+    Includes:
+        - Bond type, conjugation, in-ring flag
+        - Optional stereo flags
+        - Ring membership statistics if provided:
+            - ring count (one-hot)
+            - min ring size (one-hot)
+            - max ring size (one-hot)
+            - in any aromatic ring (0/1)
+            - in any non-aromatic ring (0/1)
 
     Args:
         bond (Chem.Bond): RDKit bond.
         use_stereochemistry (bool, optional): Include stereo flags (E/Z/any/none).
             Defaults to ``True``.
+        bond_ring_stats (dict, optional): Precomputed ring stats for bonds.
 
     Returns:
         np.ndarray: Bond feature vector.
@@ -378,6 +586,45 @@ def get_bond_features(bond: Chem.Bond, use_stereochemistry: bool = True) -> np.n
             str(bond.GetStereo()), ["STEREOZ", "STEREOE", "STEREOANY", "STEREONONE"]
         )
         bond_feature_vector += stereo_type_enc
+
+    # Ring membership statistics
+    ring_count_enc = [0] * len(RING_COUNT_CATEGORIES)
+    min_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
+    max_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
+    in_any_aromatic_ring = 0
+    in_any_non_aromatic_ring = 0
+
+    if bond_ring_stats is not None:
+        idx = bond.GetIdx()
+        stats = bond_ring_stats.get(idx)
+        if stats is not None:
+            # Ring count
+            count_val = stats["count"]
+            if count_val > 3:
+                count_val = "MoreThanThree"
+            ring_count_enc = one_hot_encoding(count_val, RING_COUNT_CATEGORIES)
+
+            # Min ring size
+            if stats["min_size"] is not None:
+                min_size_val = stats["min_size"]
+                if min_size_val > 10:
+                    min_size_val = "MoreThanTen"
+                min_ring_size_enc = one_hot_encoding(min_size_val, RING_SIZE_CATEGORIES)
+
+            # Max ring size
+            if stats["max_size"] is not None:
+                max_size_val = stats["max_size"]
+                if max_size_val > 10:
+                    max_size_val = "MoreThanTen"
+                max_ring_size_enc = one_hot_encoding(max_size_val, RING_SIZE_CATEGORIES)
+
+            in_any_aromatic_ring = int(stats["has_aromatic"])
+            in_any_non_aromatic_ring = int(stats["has_non_aromatic"])
+
+    bond_feature_vector += ring_count_enc
+    bond_feature_vector += min_ring_size_enc
+    bond_feature_vector += max_ring_size_enc
+    bond_feature_vector += [in_any_aromatic_ring, in_any_non_aromatic_ring]
 
     return np.array(bond_feature_vector)
 
@@ -471,15 +718,23 @@ def get_tensor_data(
         # Optional GNN-style node augmentation
         dRdR = get_gnn_encodings(mol) if gnn else None
 
+        # Precompute ring membership stats
+        atom_ring_stats, bond_ring_stats = get_ring_membership_stats(mol)
+
         # Node features
         x_feat = []
         for atom in mol.GetAtoms():
             idx = atom.GetIdx()
-            atom_features = get_atom_features(atom)
+            atom_features = get_atom_features(
+                atom,
+                use_chirality=True,
+                hydrogens_implicit=True,
+                atom_ring_stats=atom_ring_stats,
+            )
             if dRdR is not None:
-                x_feat.append(atom_features + [dRdR[idx][idx]])
+                x_feat.append(atom_features.tolist() + [dRdR[idx][idx]])
             else:
-                x_feat.append(atom_features)
+                x_feat.append(atom_features.tolist())
         x = torch.as_tensor(np.asarray(x_feat), dtype=torch.float)
 
         # Edges
@@ -497,7 +752,14 @@ def get_tensor_data(
             pe_tensor = None
 
         for i, j in zip(rows, cols):
-            edge_attr_feat.append(get_bond_features(mol.GetBondBetweenAtoms(int(i), int(j))))
+            bond = mol.GetBondBetweenAtoms(int(i), int(j))
+            edge_attr_feat.append(
+                get_bond_features(
+                    bond,
+                    use_stereochemistry=True,
+                    bond_ring_stats=bond_ring_stats,
+                )
+            )
         edge_attr = torch.as_tensor(np.asarray(edge_attr_feat), dtype=torch.float)
 
         # Labels (multi-task friendly)
