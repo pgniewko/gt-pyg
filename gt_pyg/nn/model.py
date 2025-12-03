@@ -24,14 +24,14 @@ class GraphTransformerNet(nn.Module):
         edge_dim_in: Optional[int] = None,
         pe_in_dim: Optional[int] = None,
         hidden_dim: int = 128,
-        norm: str = "ln",          # default to LayerNorm (better for Transformers)
+        norm: str = "ln",
         gate: bool = False,
         qkv_bias: bool = False,
         num_gt_layers: int = 4,
         num_heads: int = 8,
         gt_aggregators: List[str] = ["sum"],
         aggregators: List[str] = ["sum"],
-        act: str = "gelu",         # default to GELU
+        act: str = "gelu",
         dropout: float = 0.1,
         num_tasks: int = 1,
     ) -> None:

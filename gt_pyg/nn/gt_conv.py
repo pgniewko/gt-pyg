@@ -29,7 +29,7 @@ class GTConv(MessagePassing):
         aggregators: List[str] = ["sum"],
     ):
         """
-        Graph Transformer Convolution (GTConv) module (improved version).
+        Graph Transformer Convolution (GTConv) module. 
 
         - Pre-norm residual blocks for attention and FFN.
         - Wider, deeper FFNs by default.
