@@ -163,11 +163,15 @@ def clean_smiles_openadmet(
         DeprecationWarning,
         stacklevel=2,
     )
+    # Map old "strip_*" semantics to new "keep_*" semantics
+    keep_stereo = not strip_stereochem
+    keep_largest_fragment = strip_salts
+
     return canonicalize_smiles(
         smiles,
-        keep_stereo=not strip_stereochem,
+        keep_stereo=keep_stereo,
         keep_charges=False,  # Old behavior neutralized charges
-        keep_largest_fragment=strip_salts,
+        keep_largest_fragment=keep_largest_fragment,
     )
 
 

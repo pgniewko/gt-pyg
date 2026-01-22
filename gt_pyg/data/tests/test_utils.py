@@ -733,6 +733,27 @@ class TestCanonicalizeSmiles:
         assert mol is not None
         assert mol.GetNumAtoms() == 13
 
+    def test_remove_hs_preserves_chirality(self):
+        """Test that hydrogen removal preserves chiral center information."""
+        # Chiral molecule with explicit H in SMILES notation
+        smiles = "C[C@H](O)F"
+        result = canonicalize_smiles(smiles)
+
+        # Parse result and check chiral tag is preserved
+        mol = Chem.MolFromSmiles(result)
+        assert mol is not None
+
+        # Find the chiral carbon (bonded to C, O, F, and implicit H)
+        chiral_atoms = [
+            atom for atom in mol.GetAtoms()
+            if atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED
+        ]
+        assert len(chiral_atoms) == 1
+        assert chiral_atoms[0].GetChiralTag() in [
+            Chem.ChiralType.CHI_TETRAHEDRAL_CW,
+            Chem.ChiralType.CHI_TETRAHEDRAL_CCW,
+        ]
+
 
 class TestDeprecationWarning:
     """Tests for deprecation warning on old function name."""
