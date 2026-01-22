@@ -482,3 +482,233 @@ class TestAtomFeatureConsistency:
         feat_no_implicit = get_atom_features(atom, hydrogens_implicit=False)
         dim_no_implicit = get_atom_feature_dim(hydrogens_implicit=False)
         assert len(feat_no_implicit) == dim_no_implicit
+
+
+class TestPhysicochemicalFeatures:
+    """Tests for physicochemical feature functions."""
+
+    def test_carbon_electronegativity(self):
+        """Test electronegativity for carbon."""
+        from gt_pyg.data.atom_features import (
+            get_physicochemical_features,
+            PAULING_ELECTRONEGATIVITY,
+            ELECTRONEGATIVITY_MAX,
+        )
+        features = get_physicochemical_features(6)  # Carbon
+        expected_en = PAULING_ELECTRONEGATIVITY[6] / ELECTRONEGATIVITY_MAX
+        assert abs(features[0] - expected_en) < 1e-6
+
+    def test_feature_bounds(self):
+        """Test that all physicochemical features are bounded."""
+        from gt_pyg.data.atom_features import get_physicochemical_features
+        # Test several common atoms
+        for atomic_num in [1, 6, 7, 8, 9, 16, 17, 35, 53]:
+            features = get_physicochemical_features(atomic_num)
+            assert len(features) == 3
+            for f in features:
+                assert 0.0 <= f <= 1.0, f"Feature out of bounds for atom {atomic_num}"
+
+    def test_unknown_atom_uses_defaults(self):
+        """Test that unknown atoms use default values."""
+        from gt_pyg.data.atom_features import get_physicochemical_features
+        # Use a rare element not in lookup tables
+        features = get_physicochemical_features(118)  # Oganesson
+        assert len(features) == 3
+        for f in features:
+            assert 0.0 <= f <= 1.0
+
+    def test_different_atoms_different_features(self):
+        """Test that different atoms have different physicochemical features."""
+        from gt_pyg.data.atom_features import get_physicochemical_features
+        carbon = get_physicochemical_features(6)
+        oxygen = get_physicochemical_features(8)
+        fluorine = get_physicochemical_features(9)
+
+        assert carbon != oxygen
+        assert oxygen != fluorine
+        # Fluorine has highest electronegativity
+        assert fluorine[0] > carbon[0]
+        assert fluorine[0] > oxygen[0]
+
+
+class TestGasteigerCharge:
+    """Tests for Gasteiger charge computation."""
+
+    def test_gasteiger_charge_neutral_molecule(self):
+        """Test Gasteiger charges on a neutral molecule."""
+        from rdkit.Chem import rdPartialCharges
+        from gt_pyg.data.atom_features import get_gasteiger_charge
+
+        mol = Chem.MolFromSmiles("CCO")
+        rdPartialCharges.ComputeGasteigerCharges(mol)
+
+        for atom in mol.GetAtoms():
+            charge = get_gasteiger_charge(atom)
+            # Charges should be bounded to [-1, 1]
+            assert -1.0 <= charge <= 1.0
+
+    def test_gasteiger_charge_without_precomputation(self):
+        """Test that charge returns 0.0 without precomputation."""
+        from gt_pyg.data.atom_features import get_gasteiger_charge
+
+        mol = Chem.MolFromSmiles("C")
+        atom = mol.GetAtomWithIdx(0)
+        # Without ComputeGasteigerCharges, should return 0.0
+        charge = get_gasteiger_charge(atom)
+        assert charge == 0.0
+
+    def test_gasteiger_charge_clipping(self):
+        """Test that extreme charges are clipped."""
+        from gt_pyg.data.atom_features import get_gasteiger_charge
+        from rdkit.Chem import rdPartialCharges
+
+        # Charged molecules may have larger partial charges
+        mol = Chem.MolFromSmiles("[O-]")
+        rdPartialCharges.ComputeGasteigerCharges(mol)
+
+        atom = mol.GetAtomWithIdx(0)
+        charge = get_gasteiger_charge(atom)
+        # Should be clipped to [-1, 1]
+        assert -1.0 <= charge <= 1.0
+
+    def test_gasteiger_charge_polarity(self):
+        """Test that electropositive/negative atoms have correct sign."""
+        from rdkit.Chem import rdPartialCharges
+        from gt_pyg.data.atom_features import get_gasteiger_charge
+
+        mol = Chem.MolFromSmiles("CO")  # Methanol
+        rdPartialCharges.ComputeGasteigerCharges(mol)
+
+        carbon = mol.GetAtomWithIdx(0)
+        oxygen = mol.GetAtomWithIdx(1)
+
+        c_charge = get_gasteiger_charge(carbon)
+        o_charge = get_gasteiger_charge(oxygen)
+
+        # Oxygen is more electronegative, should have more negative partial charge
+        assert o_charge < c_charge
+
+
+class TestPharmacophoreFlags:
+    """Tests for pharmacophore flag detection."""
+
+    def test_hbond_donor_detection(self):
+        """Test H-bond donor detection."""
+        from gt_pyg.data.atom_features import get_pharmacophore_flags
+
+        mol = Chem.MolFromSmiles("CCO")  # Ethanol - OH is donor
+        flags = get_pharmacophore_flags(mol)
+
+        # Oxygen (index 2) should be H-bond donor
+        assert flags[2][0] == 1  # HBD flag
+
+    def test_hbond_acceptor_detection(self):
+        """Test H-bond acceptor detection."""
+        from gt_pyg.data.atom_features import get_pharmacophore_flags
+
+        mol = Chem.MolFromSmiles("CC=O")  # Acetaldehyde - C=O oxygen is acceptor
+        flags = get_pharmacophore_flags(mol)
+
+        # Oxygen (index 2) should be H-bond acceptor
+        assert flags[2][1] == 1  # HBA flag
+
+    def test_hydrophobic_detection(self):
+        """Test hydrophobic atom detection."""
+        from gt_pyg.data.atom_features import get_pharmacophore_flags
+
+        mol = Chem.MolFromSmiles("CCCC")  # Butane - all carbons hydrophobic
+        flags = get_pharmacophore_flags(mol)
+
+        # All carbons should be hydrophobic
+        for i in range(4):
+            assert flags[i][2] == 1  # Hydrophobic flag
+
+    def test_positive_ionizable_detection(self):
+        """Test positive ionizable detection."""
+        from gt_pyg.data.atom_features import get_pharmacophore_flags
+
+        mol = Chem.MolFromSmiles("[NH4+]")  # Ammonium
+        flags = get_pharmacophore_flags(mol)
+
+        # Nitrogen should be positive ionizable
+        assert flags[0][3] == 1  # Positive ionizable flag
+
+    def test_negative_ionizable_detection(self):
+        """Test negative ionizable detection."""
+        from gt_pyg.data.atom_features import get_pharmacophore_flags
+
+        mol = Chem.MolFromSmiles("CC(=O)[O-]")  # Acetate
+        flags = get_pharmacophore_flags(mol)
+
+        # Carboxylate oxygens should be negative ionizable
+        # The carbonyl carbon (index 1) is part of the SMARTS match
+        assert flags[1][4] == 1  # Negative ionizable flag
+
+    def test_no_pharmacophore_features(self):
+        """Test molecule with minimal pharmacophore features."""
+        from gt_pyg.data.atom_features import get_pharmacophore_flags
+
+        mol = Chem.MolFromSmiles("C")  # Methane
+        flags = get_pharmacophore_flags(mol)
+
+        # Carbon should be hydrophobic, but not donor/acceptor/ionizable
+        assert flags[0][0] == 0  # Not HBD
+        assert flags[0][1] == 0  # Not HBA
+        assert flags[0][2] == 1  # Is hydrophobic
+        assert flags[0][3] == 0  # Not positive ionizable
+        assert flags[0][4] == 0  # Not negative ionizable
+
+
+class TestNewAtomFeaturesIntegration:
+    """Integration tests for new atom features in get_atom_features."""
+
+    def test_feature_dimension_increased(self):
+        """Test that feature dimension includes new features."""
+        mol = Chem.MolFromSmiles("C")
+        atom = mol.GetAtomWithIdx(0)
+        features = get_atom_features(atom)
+
+        # New features: 3 physicochemical + 1 Gasteiger + 5 pharmacophore = 9
+        # Feature dimension should be old_dim + 9
+        assert len(features) >= 140  # Original was ~131, now ~140
+
+    def test_features_with_pharmacophore_flags(self):
+        """Test get_atom_features with precomputed pharmacophore flags."""
+        from gt_pyg.data.atom_features import get_pharmacophore_flags
+
+        mol = Chem.MolFromSmiles("CCO")
+        pharmacophore_flags = get_pharmacophore_flags(mol)
+
+        for atom in mol.GetAtoms():
+            features = get_atom_features(
+                atom,
+                pharmacophore_flags=pharmacophore_flags,
+            )
+            assert isinstance(features, np.ndarray)
+            assert not np.any(np.isnan(features))
+
+    def test_features_without_pharmacophore_flags(self):
+        """Test that features work without pharmacophore flags (defaults to zeros)."""
+        mol = Chem.MolFromSmiles("CCO")
+
+        for atom in mol.GetAtoms():
+            features = get_atom_features(atom, pharmacophore_flags=None)
+            assert isinstance(features, np.ndarray)
+            assert not np.any(np.isnan(features))
+
+    def test_all_new_features_bounded(self):
+        """Test that all new features are properly bounded."""
+        from rdkit.Chem import rdPartialCharges
+        from gt_pyg.data.atom_features import get_pharmacophore_flags
+
+        mol = Chem.MolFromSmiles("c1ccccc1O")  # Phenol
+        rdPartialCharges.ComputeGasteigerCharges(mol)
+        pharmacophore_flags = get_pharmacophore_flags(mol)
+
+        for atom in mol.GetAtoms():
+            features = get_atom_features(
+                atom,
+                pharmacophore_flags=pharmacophore_flags,
+            )
+            # All features should be finite
+            assert np.all(np.isfinite(features))

@@ -9,8 +9,11 @@ import pytest
 import torch
 from rdkit import Chem
 
+import warnings
+
 from gt_pyg.data.utils import (
     _to_float_sequence,
+    canonicalize_smiles,
     clean_df,
     clean_smiles_openadmet,
     get_data_from_csv,
@@ -629,3 +632,127 @@ class TestIntegration:
         assert torch.allclose(data1[0].x, data2[0].x)
         assert torch.equal(data1[0].edge_index, data2[0].edge_index)
         assert torch.allclose(data1[0].edge_attr, data2[0].edge_attr)
+
+
+class TestCanonicalizeSmiles:
+    """Tests for canonicalize_smiles function."""
+
+    def test_simple_smiles_canonical(self):
+        """Test that simple SMILES are canonicalized."""
+        result = canonicalize_smiles("CCO")
+        assert result is not None
+        mol = Chem.MolFromSmiles(result)
+        assert mol is not None
+        assert mol.GetNumAtoms() == 3
+
+    def test_preserves_charges_by_default(self):
+        """Test that charges are preserved by default."""
+        # Ammonium ion
+        result = canonicalize_smiles("[NH4+]")
+        assert result is not None
+        mol = Chem.MolFromSmiles(result)
+        assert mol is not None
+        # Check that charge is preserved
+        n_atom = mol.GetAtomWithIdx(0)
+        assert n_atom.GetFormalCharge() == 1
+
+    def test_preserves_negative_charges(self):
+        """Test that negative charges are preserved."""
+        result = canonicalize_smiles("[O-]")
+        assert result is not None
+        mol = Chem.MolFromSmiles(result)
+        assert mol is not None
+        o_atom = mol.GetAtomWithIdx(0)
+        assert o_atom.GetFormalCharge() == -1
+
+    def test_preserves_stereochemistry_by_default(self):
+        """Test that stereochemistry is preserved by default."""
+        result = canonicalize_smiles("C[C@H](O)F")
+        assert result is not None
+        # Check that the SMILES contains stereo indicators
+        assert "@" in result or "/" in result or "\\" in result or "@@" in result
+
+    def test_strips_stereochemistry_when_requested(self):
+        """Test that stereochemistry can be stripped."""
+        result = canonicalize_smiles("C[C@H](O)F", keep_stereo=False)
+        assert result is not None
+        # Stereo indicators should be removed
+        assert "@" not in result
+
+    def test_removes_salts_by_default(self):
+        """Test that salts are removed by default."""
+        result = canonicalize_smiles("CCO.[Na+].[Cl-]")
+        assert result is not None
+        mol = Chem.MolFromSmiles(result)
+        assert mol is not None
+        # Should only have ethanol (3 atoms)
+        assert mol.GetNumAtoms() == 3
+
+    def test_keeps_largest_fragment(self):
+        """Test that largest fragment is kept."""
+        # Ethanol is larger than water
+        result = canonicalize_smiles("CCO.O")
+        assert result is not None
+        mol = Chem.MolFromSmiles(result)
+        # Should keep ethanol (3 atoms), not water (1 atom)
+        assert mol.GetNumAtoms() == 3
+
+    def test_neutralizes_charges_when_requested(self):
+        """Test that charges can be neutralized."""
+        result = canonicalize_smiles("[NH3+]C", keep_charges=False)
+        assert result is not None
+        mol = Chem.MolFromSmiles(result)
+        assert mol is not None
+
+    def test_invalid_smiles_returns_none(self):
+        """Test that invalid SMILES returns None."""
+        result = canonicalize_smiles("invalid_smiles_xyz")
+        assert result is None
+
+    def test_empty_string_returns_none(self):
+        """Test that empty string returns None."""
+        result = canonicalize_smiles("")
+        assert result is None
+
+    def test_canonical_output_consistent(self):
+        """Test that different representations produce same canonical output."""
+        # Different ways to write ethanol
+        result1 = canonicalize_smiles("CCO")
+        result2 = canonicalize_smiles("C(C)O")
+        result3 = canonicalize_smiles("OCC")
+
+        assert result1 == result2
+        assert result2 == result3
+
+    def test_complex_molecule(self):
+        """Test canonicalization of a complex drug-like molecule."""
+        # Aspirin
+        result = canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O")
+        assert result is not None
+        mol = Chem.MolFromSmiles(result)
+        assert mol is not None
+        assert mol.GetNumAtoms() == 13
+
+
+class TestDeprecationWarning:
+    """Tests for deprecation warning on old function name."""
+
+    def test_clean_smiles_openadmet_raises_warning(self):
+        """Test that clean_smiles_openadmet raises DeprecationWarning."""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = clean_smiles_openadmet("CCO")
+
+            # Check that a warning was raised
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "canonicalize_smiles" in str(w[0].message)
+
+    def test_clean_smiles_openadmet_still_works(self):
+        """Test that clean_smiles_openadmet still produces valid output."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = clean_smiles_openadmet("CCO")
+            assert result is not None
+            mol = Chem.MolFromSmiles(result)
+            assert mol is not None

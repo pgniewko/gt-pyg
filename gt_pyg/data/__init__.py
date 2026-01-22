@@ -6,11 +6,22 @@ from .atom_features import (
     PERIOD_CATEGORIES,
     GROUP_CATEGORIES,
     PERMITTED_ATOMS,
+    # Physicochemical constants
+    PAULING_ELECTRONEGATIVITY,
+    ELECTRONEGATIVITY_MAX,
+    VDW_RADIUS,
+    VDW_RADIUS_MAX,
+    COVALENT_RADIUS,
+    COVALENT_RADIUS_MAX,
+    # Functions
     one_hot_encoding,
     get_period,
     get_group,
     get_atom_features,
     get_atom_feature_dim,
+    get_physicochemical_features,
+    get_gasteiger_charge,
+    get_pharmacophore_flags,
 )
 
 # Bond featurization
@@ -21,7 +32,8 @@ from .bond_features import (
 
 # Data utilities
 from .utils import (
-    clean_smiles_openadmet,
+    canonicalize_smiles,
+    clean_smiles_openadmet,  # Deprecated alias
     clean_df,
     get_data_from_csv,
     get_pe,
@@ -40,17 +52,28 @@ __all__ = [
     "PERIOD_CATEGORIES",
     "GROUP_CATEGORIES",
     "PERMITTED_ATOMS",
+    # Physicochemical constants
+    "PAULING_ELECTRONEGATIVITY",
+    "ELECTRONEGATIVITY_MAX",
+    "VDW_RADIUS",
+    "VDW_RADIUS_MAX",
+    "COVALENT_RADIUS",
+    "COVALENT_RADIUS_MAX",
     # Atom feature functions
     "one_hot_encoding",
     "get_period",
     "get_group",
     "get_atom_features",
     "get_atom_feature_dim",
+    "get_physicochemical_features",
+    "get_gasteiger_charge",
+    "get_pharmacophore_flags",
     # Bond feature functions
     "get_bond_features",
     "get_bond_feature_dim",
     # Data utilities
-    "clean_smiles_openadmet",
+    "canonicalize_smiles",
+    "clean_smiles_openadmet",  # Deprecated alias
     "clean_df",
     "get_data_from_csv",
     "get_pe",

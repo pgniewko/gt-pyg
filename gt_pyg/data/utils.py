@@ -1,5 +1,6 @@
 # Standard library
 import logging
+import warnings
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 # Third-party
@@ -8,6 +9,7 @@ import pandas as pd
 import torch
 from numpy.linalg import pinv
 from rdkit import Chem, RDLogger, rdBase
+from rdkit.Chem import rdPartialCharges
 from rdkit.Chem.SaltRemover import SaltRemover
 from rdkit.Chem.rdmolops import GetAdjacencyMatrix
 from torch_geometric.data import Data
@@ -26,6 +28,7 @@ from .atom_features import (
     get_group,
     get_atom_features,
     get_atom_feature_dim,
+    get_pharmacophore_flags,
 )
 from .bond_features import (
     get_bond_features,
@@ -56,55 +59,116 @@ def get_edge_dim() -> int:
     return data.edge_attr.size(-1)
 
 
-# Copied from the xrx_prf repo
+def canonicalize_smiles(
+    smiles: str,
+    keep_stereo: bool = True,
+    keep_charges: bool = True,
+    keep_largest_fragment: bool = True,
+) -> Optional[str]:
+    """Canonicalize a SMILES string with optional fragment/stereo/charge handling.
+
+    This function produces a consistent canonical SMILES representation while
+    preserving important chemical information like charges and stereochemistry
+    by default.
+
+    Args:
+        smiles (str): Input SMILES string.
+        keep_stereo (bool, optional): Preserve stereochemistry (@, @@, /, \\).
+            Defaults to True.
+        keep_charges (bool, optional): Preserve formal charges ([NH4+], [O-], etc.).
+            Defaults to True.
+        keep_largest_fragment (bool, optional): Keep only the largest fragment
+            by heavy atom count (removes salts/counterions). Defaults to True.
+
+    Returns:
+        Optional[str]: Canonical SMILES string, or None if parsing fails.
+
+    Examples:
+        >>> canonicalize_smiles("[NH4+]")  # Preserves charge
+        '[NH4+]'
+        >>> canonicalize_smiles("C[C@H](O)F")  # Preserves stereo
+        'C[C@H](O)F'
+        >>> canonicalize_smiles("CCO.[Na+].[Cl-]")  # Removes salts
+        'CCO'
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return None
+
+        # Remove explicit hydrogens (keep implicit)
+        mol = Chem.RemoveHs(mol)
+
+        # Strip stereochemistry if requested
+        if not keep_stereo:
+            Chem.RemoveStereochemistry(mol)
+
+        # Keep largest fragment (remove salts/counterions)
+        if keep_largest_fragment:
+            frags = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=True)
+            if frags:
+                # Select fragment with most heavy atoms
+                sizes = [frag.GetNumHeavyAtoms() for frag in frags]
+                mol = frags[sizes.index(max(sizes))]
+
+        # Neutralize charges if requested
+        if not keep_charges:
+            pattern = Chem.MolFromSmarts(
+                "[+1!h0!$([*]~[-1,-2,-3,-4]),-1!$([*]~[+1,+2,+3,+4])]"
+            )
+            at_matches = mol.GetSubstructMatches(pattern)
+            at_matches_list = [y[0] for y in at_matches]
+            if len(at_matches_list) > 0:
+                for at_idx in at_matches_list:
+                    atom = mol.GetAtomWithIdx(at_idx)
+                    chg = atom.GetFormalCharge()
+                    hcount = atom.GetTotalNumHs()
+                    atom.SetFormalCharge(0)
+                    atom.SetNumExplicitHs(hcount - chg)
+                    atom.UpdatePropertyCache()
+
+        # Generate canonical SMILES
+        out_smi = Chem.MolToSmiles(mol, isomericSmiles=keep_stereo, canonical=True)
+        if not out_smi:
+            return None
+        return out_smi
+
+    except Exception as e:
+        logging.warning(f"Failed to canonicalize SMILES '{smiles}': {e}")
+        return None
+
+
 def clean_smiles_openadmet(
     smiles: str,
     remove_hs: bool = True,
     strip_stereochem: bool = False,
     strip_salts: bool = True,
-) -> str:
-    """Applies preprocessing to SMILES strings, seeking the 'parent' SMILES
+) -> Optional[str]:
+    """Deprecated. Use canonicalize_smiles instead.
 
-    Note that this is different from simply _neutralizing_ the input SMILES - we attempt to get the parent molecule, analogous to a molecular skeleton.
-    This is adapted in part from https://rdkit.org/docs/Cookbook.html#neutralizing-molecules
+    This function is kept for backward compatibility. It wraps canonicalize_smiles
+    with parameters mapped to preserve the original behavior (neutralizes charges).
 
     Args:
-        smiles (str): input SMILES
+        smiles (str): Input SMILES string.
         remove_hs (bool, optional): Removes hydrogens. Defaults to True.
-        strip_stereochem (bool, optional): Remove R/S and cis/trans stereochemistry. Defaults to False.
+        strip_stereochem (bool, optional): Remove stereochemistry. Defaults to False.
         strip_salts (bool, optional): Remove salt ions. Defaults to True.
 
     Returns:
-        str: cleaned SMILES
+        Optional[str]: Cleaned SMILES string, or None if parsing fails.
     """
-    try:
-        mol = Chem.MolFromSmiles(smiles)
-        assert mol is not None, f"Could not parse SMILES {smiles}"
-        if remove_hs:
-            mol = Chem.RemoveHs(mol)
-        if strip_stereochem:
-            Chem.RemoveStereochemistry(mol)
-        if strip_salts:
-            remover = SaltRemover()  # use default saltremover
-            mol = remover.StripMol(mol)  # strip salts
-
-        pattern = Chem.MolFromSmarts("[+1!h0!$([*]~[-1,-2,-3,-4]),-1!$([*]~[+1,+2,+3,+4])]")
-        at_matches = mol.GetSubstructMatches(pattern)
-        at_matches_list = [y[0] for y in at_matches]
-        if len(at_matches_list) > 0:
-            for at_idx in at_matches_list:
-                atom = mol.GetAtomWithIdx(at_idx)
-                chg = atom.GetFormalCharge()
-                hcount = atom.GetTotalNumHs()
-                atom.SetFormalCharge(0)
-                atom.SetNumExplicitHs(hcount - chg)
-                atom.UpdatePropertyCache()
-        out_smi = Chem.MolToSmiles(mol, kekuleSmiles=True, isomericSmiles=True)
-        assert len(out_smi) > 0, f"Could not convert molecule to SMILES {smiles}"
-        return out_smi
-    except Exception as e:
-        print(f"Failed to clean SMILES {smiles} due to {e}")
-        return None
+    warnings.warn(
+        "clean_smiles_openadmet is deprecated, use canonicalize_smiles instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return canonicalize_smiles(
+        smiles,
+        keep_stereo=not strip_stereochem,
+        keep_charges=False,  # Old behavior neutralized charges
+        keep_largest_fragment=strip_salts,
+    )
 
 
 def clean_df(
@@ -453,12 +517,22 @@ def get_tensor_data(
     data_list: List[Data] = []
 
     for smiles, y_val in tqdm(zip(x_smiles, y), total=len(x_smiles), desc="Processing data"):
-        # Parse SMILES
-        smiles = clean_smiles_openadmet(smiles)
+        # Parse and canonicalize SMILES
+        smiles = canonicalize_smiles(smiles)
         mol = Chem.MolFromSmiles(smiles)
-        Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
         if mol is None:
             raise ValueError(f"RDKit failed to parse SMILES: {smiles}")
+        Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
+
+        # Compute Gasteiger partial charges for the entire molecule
+        try:
+            rdPartialCharges.ComputeGasteigerCharges(mol)
+        except Exception:
+            # If Gasteiger computation fails, charges will be 0.0 (handled in get_atom_features)
+            pass
+
+        # Compute pharmacophore flags for entire molecule
+        pharmacophore_flags = get_pharmacophore_flags(mol)
 
         # Optional GNN-style node augmentation
         dRdR = get_gnn_encodings(mol) if gnn else None
@@ -475,6 +549,7 @@ def get_tensor_data(
                 use_chirality=True,
                 hydrogens_implicit=True,
                 atom_ring_stats=atom_ring_stats,
+                pharmacophore_flags=pharmacophore_flags,
             )
             if dRdR is not None:
                 x_feat.append(atom_features.tolist() + [dRdR[idx][idx]])
