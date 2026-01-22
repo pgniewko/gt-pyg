@@ -33,7 +33,6 @@ from .bond_features import (
 # Data utilities
 from .utils import (
     canonicalize_smiles,
-    clean_smiles_openadmet,  # Deprecated alias
     clean_df,
     get_data_from_csv,
     get_pe,
@@ -73,7 +72,6 @@ __all__ = [
     "get_bond_feature_dim",
     # Data utilities
     "canonicalize_smiles",
-    "clean_smiles_openadmet",  # Deprecated alias
     "clean_df",
     "get_data_from_csv",
     "get_pe",

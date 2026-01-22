@@ -1,6 +1,5 @@
 # Standard library
 import logging
-import warnings
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 # Third-party
@@ -136,43 +135,6 @@ def canonicalize_smiles(
     except Exception as e:
         logging.warning(f"Failed to canonicalize SMILES '{smiles}': {e}")
         return None
-
-
-def clean_smiles_openadmet(
-    smiles: str,
-    remove_hs: bool = True,
-    strip_stereochem: bool = False,
-    strip_salts: bool = True,
-) -> Optional[str]:
-    """Deprecated. Use canonicalize_smiles instead.
-
-    This function is kept for backward compatibility. It wraps canonicalize_smiles
-    with parameters mapped to preserve the original behavior (neutralizes charges).
-
-    Args:
-        smiles (str): Input SMILES string.
-        remove_hs (bool, optional): Removes hydrogens. Defaults to True.
-        strip_stereochem (bool, optional): Remove stereochemistry. Defaults to False.
-        strip_salts (bool, optional): Remove salt ions. Defaults to True.
-
-    Returns:
-        Optional[str]: Cleaned SMILES string, or None if parsing fails.
-    """
-    warnings.warn(
-        "clean_smiles_openadmet is deprecated, use canonicalize_smiles instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    # Map old "strip_*" semantics to new "keep_*" semantics
-    keep_stereo = not strip_stereochem
-    keep_largest_fragment = strip_salts
-
-    return canonicalize_smiles(
-        smiles,
-        keep_stereo=keep_stereo,
-        keep_charges=False,  # Old behavior neutralized charges
-        keep_largest_fragment=keep_largest_fragment,
-    )
 
 
 def clean_df(

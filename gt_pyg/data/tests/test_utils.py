@@ -9,13 +9,10 @@ import pytest
 import torch
 from rdkit import Chem
 
-import warnings
-
 from gt_pyg.data.utils import (
     _to_float_sequence,
     canonicalize_smiles,
     clean_df,
-    clean_smiles_openadmet,
     get_data_from_csv,
     get_edge_dim,
     get_gnn_encodings,
@@ -34,74 +31,6 @@ TEST_SMILES = {
     "caffeine": "Cn1cnc2c1c(=O)n(c(=O)n2C)C",
     "simple_chain": "CCCC",
 }
-
-
-class TestCleanSmilesOpenadmet:
-    """Tests for clean_smiles_openadmet function."""
-
-    def test_simple_smiles_unchanged(self):
-        """Test that simple valid SMILES are essentially unchanged."""
-        result = clean_smiles_openadmet("CCO")
-        # Should return a valid SMILES
-        mol = Chem.MolFromSmiles(result)
-        assert mol is not None
-        # Should still be ethanol (2 carbons, 1 oxygen)
-        assert mol.GetNumAtoms() == 3
-
-    def test_removes_salts(self):
-        """Test that salts are removed."""
-        # Simple salt with organic component
-        # Using a simpler example that the function can handle
-        result = clean_smiles_openadmet("CCO.[Na+].[Cl-]", strip_salts=True)
-        if result is not None:
-            mol = Chem.MolFromSmiles(result)
-            if mol is not None:
-                # Should only have ethanol part
-                assert mol.GetNumAtoms() <= 3
-
-    def test_removes_hydrogens(self):
-        """Test that explicit hydrogens are removed."""
-        result = clean_smiles_openadmet("[CH4]", remove_hs=True)
-        assert result is not None
-
-    def test_preserves_stereochemistry_by_default(self):
-        """Test that stereochemistry is preserved by default."""
-        result = clean_smiles_openadmet("C[C@H](O)F", strip_stereochem=False)
-        assert result is not None
-        # Check it can be parsed
-        mol = Chem.MolFromSmiles(result)
-        assert mol is not None
-
-    def test_strips_stereochemistry_when_requested(self):
-        """Test that stereochemistry can be stripped."""
-        result = clean_smiles_openadmet("C[C@H](O)F", strip_stereochem=True)
-        assert result is not None
-        mol = Chem.MolFromSmiles(result)
-        assert mol is not None
-
-    def test_invalid_smiles_returns_none(self):
-        """Test that invalid SMILES returns None."""
-        result = clean_smiles_openadmet("invalid_smiles_xyz")
-        assert result is None
-
-    def test_multi_fragment_keeps_largest(self):
-        """Test handling of multi-fragment SMILES."""
-        # Sodium chloride + ethanol
-        result = clean_smiles_openadmet("CCO.[Na+].[Cl-]", strip_salts=True)
-        if result is not None:
-            mol = Chem.MolFromSmiles(result)
-            if mol is not None:
-                # Should be ethanol or just the organic part
-                assert mol.GetNumAtoms() <= 3
-
-    def test_neutralizes_charges(self):
-        """Test that some charges are neutralized."""
-        # Methylammonium - should try to neutralize
-        result = clean_smiles_openadmet("[NH3+]C")
-        # Should return something valid
-        if result is not None:
-            mol = Chem.MolFromSmiles(result)
-            assert mol is not None
 
 
 class TestCleanDf:
@@ -753,27 +682,3 @@ class TestCanonicalizeSmiles:
             Chem.ChiralType.CHI_TETRAHEDRAL_CW,
             Chem.ChiralType.CHI_TETRAHEDRAL_CCW,
         ]
-
-
-class TestDeprecationWarning:
-    """Tests for deprecation warning on old function name."""
-
-    def test_clean_smiles_openadmet_raises_warning(self):
-        """Test that clean_smiles_openadmet raises DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = clean_smiles_openadmet("CCO")
-
-            # Check that a warning was raised
-            assert len(w) == 1
-            assert issubclass(w[0].category, DeprecationWarning)
-            assert "canonicalize_smiles" in str(w[0].message)
-
-    def test_clean_smiles_openadmet_still_works(self):
-        """Test that clean_smiles_openadmet still produces valid output."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            result = clean_smiles_openadmet("CCO")
-            assert result is not None
-            mol = Chem.MolFromSmiles(result)
-            assert mol is not None
