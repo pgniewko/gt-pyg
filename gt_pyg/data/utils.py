@@ -22,7 +22,6 @@ from .atom_features import (
     PERIOD_CATEGORIES,
     GROUP_CATEGORIES,
     PERMITTED_ATOMS,
-    one_hot_encoding,
     get_period,
     get_group,
     get_atom_features,

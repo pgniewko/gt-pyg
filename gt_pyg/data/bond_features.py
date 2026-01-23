@@ -44,6 +44,7 @@ def get_bond_features(
         Chem.rdchem.BondType.DOUBLE,
         Chem.rdchem.BondType.TRIPLE,
         Chem.rdchem.BondType.AROMATIC,
+        Chem.rdchem.BondType.OTHER,
     ]
 
     bond_type_enc = one_hot_encoding(bond.GetBondType(), permitted_list_of_bond_types)
@@ -54,7 +55,8 @@ def get_bond_features(
 
     if use_stereochemistry:
         stereo_type_enc = one_hot_encoding(
-            str(bond.GetStereo()), ["STEREOZ", "STEREOE", "STEREOANY", "STEREONONE"]
+            str(bond.GetStereo()),
+            ["STEREOZ", "STEREOE", "STEREOANY", "STEREONONE", "STEREOCIS", "STEREOTRANS", "OTHER"],
         )
         bond_feature_vector += stereo_type_enc
 
