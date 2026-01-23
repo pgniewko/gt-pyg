@@ -1,6 +1,6 @@
 # Standard library
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 # Third-party
 import numpy as np
@@ -173,7 +173,7 @@ def get_pe(mol: Chem.Mol, pe_dim: int = 6, normalized: bool = True) -> np.ndarra
 
 def get_ring_membership_stats(
     mol: Chem.Mol,
-) -> (Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]]):
+) -> Tuple[Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]]]:
     """Precompute ring membership statistics for atoms and bonds.
 
     Returns:

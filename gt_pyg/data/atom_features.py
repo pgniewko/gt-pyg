@@ -1,5 +1,5 @@
 # Standard library
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 # Third-party
 import numpy as np
@@ -41,7 +41,7 @@ PERMITTED_ATOMS = [
 PERIODIC_TABLE = Chem.GetPeriodicTable()
 
 
-def one_hot_encoding(x, permitted_list: List) -> List[int]:
+def one_hot_encoding(x: Union[str, int, Any], permitted_list: List) -> List[int]:
     """Return a one-hot encoding for ``x`` over a permitted vocabulary.
 
     Any ``x`` not in ``permitted_list`` is mapped to the last element.
