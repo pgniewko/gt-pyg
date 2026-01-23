@@ -43,7 +43,7 @@ def get_node_dim() -> int:
     Returns:
         int: Number of features per node.
     """
-    data = get_tensor_data([__SMILES], [0], pe=False)[0]
+    data = get_tensor_data([__SMILES], [0])[0]
     return data.x.size(-1)
 
 
@@ -53,7 +53,7 @@ def get_edge_dim() -> int:
     Returns:
         int: Number of features per edge.
     """
-    data = get_tensor_data([__SMILES], [0], pe=False)[0]
+    data = get_tensor_data([__SMILES], [0])[0]
     return data.edge_attr.size(-1)
 
 
@@ -134,41 +134,6 @@ def canonicalize_smiles(
     except Exception as e:
         logging.warning(f"Failed to canonicalize SMILES '{smiles}': {e}")
         return None
-
-
-def get_pe(mol: Chem.Mol, pe_dim: int = 6, normalized: bool = True) -> np.ndarray:
-    """Compute positional encodings via Laplacian eigenvectors.
-
-    Uses the (optionally normalized) graph Laplacian on the molecular graph and
-    returns the first ``pe_dim`` non-trivial eigenvectors.
-
-    Args:
-        mol (Chem.Mol): Input molecule.
-        pe_dim (int, optional): Number of eigenvectors to keep. Defaults to ``6``.
-        normalized (bool, optional): Use normalized Laplacian if True. Defaults to ``True``.
-
-    Returns:
-        np.ndarray: Array of shape ``[num_atoms, pe_dim]``.
-    """
-    adj = Chem.rdmolops.GetAdjacencyMatrix(mol)
-    degree = np.diag(np.sum(adj, axis=1))
-    laplacian = degree - adj
-    if normalized:
-        degree_inv_sqrt = np.diag(np.sum(adj, axis=1) ** (-0.5))
-        laplacian = degree_inv_sqrt @ laplacian @ degree_inv_sqrt
-    try:
-        val, vec = np.linalg.eig(laplacian)
-    except Exception:
-        print(Chem.MolToSmiles(mol))
-        raise
-
-    vec = vec[:, np.argsort(val)]
-    N = vec.shape[1]
-    M = pe_dim + 1
-    if N < M:
-        vec = np.pad(vec, ((0, 0), (0, M - N)), mode="constant")
-
-    return vec[:, 1:M]
 
 
 def get_ring_membership_stats(
@@ -303,8 +268,6 @@ def get_tensor_data(
     x_smiles: List[str],
     y: List[Union[float, int, Sequence[Optional[float]], np.ndarray]],
     gnn: bool = True,
-    pe: bool = True,
-    pe_dim: int = 6,
 ) -> List[Data]:
     """Build torch_geometric molecular graphs with labels and masks.
 
@@ -318,16 +281,12 @@ def get_tensor_data(
             single float/int (single-task) or a sequence/array (multi-task).
         gnn (bool, optional): If True, append GNN-style diagonal terms to node features.
             Defaults to ``True``.
-        pe (bool, optional): If True, include positional encodings in ``Data.pe``.
-            Defaults to ``True``.
-        pe_dim (int, optional): Number of PE dimensions to keep. Defaults to ``6``.
 
     Returns:
         List[Data]: One ``Data`` per sample with fields:
             - ``x`` (torch.FloatTensor): Node features ``[N, F]``.
             - ``edge_index`` (torch.LongTensor): COO edges ``[2, E]``.
             - ``edge_attr`` (torch.FloatTensor): Edge features ``[E, D]``.
-            - ``pe`` (torch.FloatTensor | None): Positional encodings ``[N, pe_dim]`` if ``pe=True``.
             - ``y`` (torch.FloatTensor): Task targets ``[T]``.
             - ``y_mask`` (torch.FloatTensor): Mask ``[T]`` (1=present, 0=missing).
     """
@@ -382,12 +341,6 @@ def get_tensor_data(
 
         # Edge attributes
         edge_attr_feat = []
-        if pe:
-            pe_numpy = get_pe(mol, pe_dim=pe_dim)
-            pe_tensor = torch.as_tensor(pe_numpy, dtype=torch.float)
-        else:
-            pe_tensor = None
-
         for i, j in zip(rows, cols):
             bond = mol.GetBondBetweenAtoms(int(i), int(j))
             edge_attr_feat.append(
@@ -410,7 +363,6 @@ def get_tensor_data(
                 x=x,
                 edge_index=edge_index,
                 edge_attr=edge_attr,
-                pe=pe_tensor,
                 y=y_tensor,          # [num_tasks]
                 y_mask=y_mask_tensor # [num_tasks]
             )

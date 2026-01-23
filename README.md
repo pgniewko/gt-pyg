@@ -73,7 +73,7 @@ from torch_geometric.loader import DataLoader
 from gt_pyg.data import get_tensor_data
 
 dataset = pd.read_csv('solubility.csv')
-tr_dataset = get_tensor_data(dataset['SMILES'].tolist(), dataset['logS'].tolist(), pe_dim=6)
+tr_dataset = get_tensor_data(dataset['SMILES'].tolist(), dataset['logS'].tolist())
 train_loader = DataLoader(tr_dataset, batch_size=256)
 ```
 
