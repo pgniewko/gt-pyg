@@ -22,7 +22,6 @@ class GraphTransformerNet(nn.Module):
         self,
         node_dim_in: int,
         edge_dim_in: Optional[int] = None,
-        pe_in_dim: Optional[int] = None,
         hidden_dim: int = 128,
         norm: str = "ln",
         gate: bool = False,
@@ -60,15 +59,7 @@ class GraphTransformerNet(nn.Module):
             self.edge_emb = None
             edge_in_dim_hidden = None  # GTConv will be instantiated without edge features
 
-        # Positional encoding embedding (optional)
-        if pe_in_dim is not None:
-            self.pe_emb: Optional[nn.Module] = nn.Linear(
-                pe_in_dim, hidden_dim, bias=False
-            )
-        else:
-            self.pe_emb = None
-
-        # Input norm & dropout after combining node + PE embeddings
+        # Input norm & dropout
         if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
             self.input_norm = nn.BatchNorm1d(hidden_dim)
         elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
@@ -146,8 +137,6 @@ class GraphTransformerNet(nn.Module):
         nn.init.xavier_uniform_(self.node_emb.weight)
         if self.edge_emb is not None:
             nn.init.xavier_uniform_(self.edge_emb.weight)
-        if self.pe_emb is not None:
-            nn.init.xavier_uniform_(self.pe_emb.weight)
 
         # Norms
         if isinstance(self.input_norm, nn.BatchNorm1d):
@@ -194,7 +183,6 @@ class GraphTransformerNet(nn.Module):
         x: Tensor,
         edge_index: Tensor,
         edge_attr: Optional[Tensor],
-        pe: Optional[Tensor],
         batch: Union[Batch, Tensor],
         zero_var: bool = False,
     ) -> Tuple[Tensor, Tensor]:
@@ -206,8 +194,6 @@ class GraphTransformerNet(nn.Module):
             edge_index: Edge indices [2, num_edges].
             edge_attr: Edge features [num_edges, edge_dim_in] if provided
                        (required if edge_dim_in was set).
-            pe: Positional encodings [num_nodes, pe_in_dim] if provided
-                (required if pe_in_dim was set).
             batch: Either a `Batch` object or a batch index tensor of shape [num_nodes].
             zero_var (bool): If True, do NOT sample; return deterministic mu.
                              (Variance is still predicted and returned via log_var.)
@@ -219,14 +205,6 @@ class GraphTransformerNet(nn.Module):
         """
         # Node embedding
         h = self.node_emb(x)  # [N, H]
-
-        # Positional encodings (if present)
-        if self.pe_emb is not None:
-            if pe is None:
-                raise ValueError(
-                    "pe_in_dim was set in __init__, but 'pe' is None in forward()."
-                )
-            h = h + self.pe_emb(pe)
 
         # Input norm + dropout
         h = self.input_norm(h)

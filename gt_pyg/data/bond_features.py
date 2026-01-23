@@ -32,7 +32,7 @@ def get_bond_features(
 
     Args:
         bond (Chem.Bond): RDKit bond.
-        use_stereochemistry (bool, optional): Include stereo flags (E/Z/any/none).
+        use_stereochemistry (bool, optional): Include stereo flags (Z/E/cis/trans/any/none/other).
             Defaults to ``True``.
         bond_ring_stats (dict, optional): Precomputed ring stats for bonds.
 

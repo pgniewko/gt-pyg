@@ -25,7 +25,6 @@ from .bond_features import (
 # Data utilities
 from .utils import (
     canonicalize_smiles,
-    get_pe,
     get_ring_membership_stats,
     get_gnn_encodings,
     get_tensor_data,
@@ -54,7 +53,6 @@ __all__ = [
     "get_bond_feature_dim",
     # Data utilities
     "canonicalize_smiles",
-    "get_pe",
     "get_ring_membership_stats",
     "get_gnn_encodings",
     "get_tensor_data",
