@@ -64,15 +64,16 @@ gt = GTConv(node_in_dim=num_node_features,
 gt(x=x, edge_index=edge_index, edge_attr=edge_attr)
 ```
 
-The code also supports custom datasets. For example, if you have a file called `solubility.csv`  
+The code also supports custom datasets. For example, if you have a file called `solubility.csv`
 with columns `SMILES` and `logS`, you can prepare a `DataLoader` object as follows:
 
 ```python
-fn = 'solubility.csv'
-x_label='SMILES'
-y_label='logS'
-dataset = get_data_from_csv(fn, x_label=x_label, y_label=y_label)
-tr_dataset = get_tensor_data(dataset[x_label], dataset[y_label].to_list(), pe_dim=6)
+import pandas as pd
+from torch_geometric.loader import DataLoader
+from gt_pyg.data import get_tensor_data
+
+dataset = pd.read_csv('solubility.csv')
+tr_dataset = get_tensor_data(dataset['SMILES'].tolist(), dataset['logS'].tolist(), pe_dim=6)
 train_loader = DataLoader(tr_dataset, batch_size=256)
 ```
 
