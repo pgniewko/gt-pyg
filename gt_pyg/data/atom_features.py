@@ -7,160 +7,6 @@ from rdkit import Chem
 
 
 # -----------------------------
-# Physicochemical property lookup tables
-# -----------------------------
-
-# Pauling electronegativity values for common elements
-# Source: https://en.wikipedia.org/wiki/Electronegativity
-PAULING_ELECTRONEGATIVITY = {
-    1: 2.20,   # H
-    3: 0.98,   # Li
-    5: 2.04,   # B
-    6: 2.55,   # C
-    7: 3.04,   # N
-    8: 3.44,   # O
-    9: 3.98,   # F
-    11: 0.93,  # Na
-    12: 1.31,  # Mg
-    13: 1.61,  # Al
-    14: 1.90,  # Si
-    15: 2.19,  # P
-    16: 2.58,  # S
-    17: 3.16,  # Cl
-    19: 0.82,  # K
-    20: 1.00,  # Ca
-    22: 1.54,  # Ti
-    23: 1.63,  # V
-    24: 1.66,  # Cr
-    25: 1.55,  # Mn
-    26: 1.83,  # Fe
-    27: 1.88,  # Co
-    28: 1.91,  # Ni
-    29: 1.90,  # Cu
-    30: 1.65,  # Zn
-    32: 2.01,  # Ge
-    33: 2.18,  # As
-    34: 2.55,  # Se
-    35: 2.96,  # Br
-    40: 1.33,  # Zr
-    46: 2.20,  # Pd
-    47: 1.93,  # Ag
-    48: 1.69,  # Cd
-    49: 1.78,  # In
-    50: 1.96,  # Sn
-    51: 2.05,  # Sb
-    53: 2.66,  # I
-    70: 1.10,  # Yb
-    78: 2.28,  # Pt
-    79: 2.54,  # Au
-    80: 2.00,  # Hg
-    81: 1.62,  # Tl
-    82: 2.33,  # Pb
-}
-ELECTRONEGATIVITY_MAX = 4.0
-ELECTRONEGATIVITY_DEFAULT = 2.5  # Reasonable default for unknown elements
-
-# Van der Waals radii in Angstroms
-# Source: Bondi, A. (1964). "van der Waals Volumes and Radii"
-VDW_RADIUS = {
-    1: 1.20,   # H
-    3: 1.82,   # Li
-    5: 1.92,   # B
-    6: 1.70,   # C
-    7: 1.55,   # N
-    8: 1.52,   # O
-    9: 1.47,   # F
-    11: 2.27,  # Na
-    12: 1.73,  # Mg
-    13: 1.84,  # Al
-    14: 2.10,  # Si
-    15: 1.80,  # P
-    16: 1.80,  # S
-    17: 1.75,  # Cl
-    19: 2.75,  # K
-    20: 2.31,  # Ca
-    22: 2.11,  # Ti
-    23: 2.07,  # V
-    24: 2.06,  # Cr
-    25: 2.05,  # Mn
-    26: 2.04,  # Fe
-    27: 2.00,  # Co
-    28: 1.63,  # Ni
-    29: 1.40,  # Cu
-    30: 1.39,  # Zn
-    32: 2.11,  # Ge
-    33: 1.85,  # As
-    34: 1.90,  # Se
-    35: 1.85,  # Br
-    40: 2.23,  # Zr
-    46: 1.63,  # Pd
-    47: 1.72,  # Ag
-    48: 1.58,  # Cd
-    49: 1.93,  # In
-    50: 2.17,  # Sn
-    51: 2.06,  # Sb
-    53: 1.98,  # I
-    70: 2.42,  # Yb
-    78: 1.75,  # Pt
-    79: 1.66,  # Au
-    80: 1.55,  # Hg
-    81: 1.96,  # Tl
-    82: 2.02,  # Pb
-}
-VDW_RADIUS_MAX = 3.0
-VDW_RADIUS_DEFAULT = 1.70  # Carbon as default
-
-# Covalent radii in Angstroms
-# Source: Cordero et al. (2008). "Covalent radii revisited"
-COVALENT_RADIUS = {
-    1: 0.31,   # H
-    3: 1.28,   # Li
-    5: 0.84,   # B
-    6: 0.76,   # C
-    7: 0.71,   # N
-    8: 0.66,   # O
-    9: 0.57,   # F
-    11: 1.66,  # Na
-    12: 1.41,  # Mg
-    13: 1.21,  # Al
-    14: 1.11,  # Si
-    15: 1.07,  # P
-    16: 1.05,  # S
-    17: 1.02,  # Cl
-    19: 2.03,  # K
-    20: 1.76,  # Ca
-    22: 1.60,  # Ti
-    23: 1.53,  # V
-    24: 1.39,  # Cr
-    25: 1.39,  # Mn (low spin)
-    26: 1.32,  # Fe (low spin)
-    27: 1.26,  # Co (low spin)
-    28: 1.24,  # Ni
-    29: 1.32,  # Cu
-    30: 1.22,  # Zn
-    32: 1.20,  # Ge
-    33: 1.19,  # As
-    34: 1.20,  # Se
-    35: 1.20,  # Br
-    40: 1.75,  # Zr
-    46: 1.39,  # Pd
-    47: 1.45,  # Ag
-    48: 1.44,  # Cd
-    49: 1.42,  # In
-    50: 1.39,  # Sn
-    51: 1.39,  # Sb
-    53: 1.39,  # I
-    70: 1.87,  # Yb
-    78: 1.36,  # Pt
-    79: 1.36,  # Au
-    80: 1.32,  # Hg
-    81: 1.45,  # Tl
-    82: 1.46,  # Pb
-}
-COVALENT_RADIUS_MAX = 2.5
-COVALENT_RADIUS_DEFAULT = 0.77  # Carbon as default
-
-# -----------------------------
 # Pharmacophore SMARTS patterns (precompiled at module load)
 # -----------------------------
 # H-bond donor: N or O with at least one hydrogen
@@ -193,32 +39,6 @@ PERMITTED_ATOMS = [
 
 # Use RDKit's periodic table helper
 PERIODIC_TABLE = Chem.GetPeriodicTable()
-
-
-def get_physicochemical_features(atomic_num: int) -> List[float]:
-    """Return normalized physicochemical features for an atom.
-
-    Features returned (all bounded to [0, 1]):
-        - Pauling electronegativity / 4.0
-        - Van der Waals radius / 3.0
-        - Covalent radius / 2.5
-
-    Args:
-        atomic_num (int): Atomic number of the element.
-
-    Returns:
-        List[float]: List of 3 normalized physicochemical features.
-    """
-    en = PAULING_ELECTRONEGATIVITY.get(atomic_num, ELECTRONEGATIVITY_DEFAULT)
-    en_norm = min(en / ELECTRONEGATIVITY_MAX, 1.0)
-
-    vdw = VDW_RADIUS.get(atomic_num, VDW_RADIUS_DEFAULT)
-    vdw_norm = min(vdw / VDW_RADIUS_MAX, 1.0)
-
-    cov = COVALENT_RADIUS.get(atomic_num, COVALENT_RADIUS_DEFAULT)
-    cov_norm = min(cov / COVALENT_RADIUS_MAX, 1.0)
-
-    return [en_norm, vdw_norm, cov_norm]
 
 
 def get_gasteiger_charge(atom: Chem.Atom, clip: float = 2.0) -> float:
@@ -412,10 +232,6 @@ def get_atom_features(
             - max ring size (one-hot)
             - in any aromatic ring (0/1)
             - in any non-aromatic ring (0/1)
-        - Physicochemical features (3 continuous, bounded [0, 1]):
-            - Pauling electronegativity (normalized)
-            - Van der Waals radius (normalized)
-            - Covalent radius (normalized)
         - Gasteiger partial charge (1 continuous, bounded [-1, 1])
         - Pharmacophore flags (5 binary):
             - H-bond donor, H-bond acceptor, hydrophobic,
@@ -528,10 +344,6 @@ def get_atom_features(
     atom_feature_vector += min_ring_size_enc
     atom_feature_vector += max_ring_size_enc
     atom_feature_vector += [in_any_aromatic_ring, in_any_non_aromatic_ring]
-
-    # Physicochemical features (3 continuous, bounded [0, 1])
-    physchem = get_physicochemical_features(atomic_num)
-    atom_feature_vector += physchem
 
     # Gasteiger partial charge (1 continuous, bounded [-1, 1])
     gasteiger = get_gasteiger_charge(atom)
