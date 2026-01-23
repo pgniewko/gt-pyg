@@ -4,12 +4,10 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 # Third-party
 import numpy as np
-import pandas as pd
 import torch
 from numpy.linalg import pinv
-from rdkit import Chem, RDLogger, rdBase
+from rdkit import Chem
 from rdkit.Chem import rdPartialCharges
-from rdkit.Chem.SaltRemover import SaltRemover
 from rdkit.Chem.rdmolops import GetAdjacencyMatrix
 from torch_geometric.data import Data
 from tqdm.auto import tqdm
