@@ -33,8 +33,6 @@ from .bond_features import (
 # Data utilities
 from .utils import (
     canonicalize_smiles,
-    clean_df,
-    get_data_from_csv,
     get_pe,
     get_ring_membership_stats,
     get_gnn_encodings,
@@ -72,8 +70,6 @@ __all__ = [
     "get_bond_feature_dim",
     # Data utilities
     "canonicalize_smiles",
-    "clean_df",
-    "get_data_from_csv",
     "get_pe",
     "get_ring_membership_stats",
     "get_gnn_encodings",

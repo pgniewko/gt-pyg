@@ -1,8 +1,5 @@
 """Comprehensive tests for data utilities module."""
 
-import tempfile
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -12,8 +9,6 @@ from rdkit import Chem
 from gt_pyg.data.utils import (
     _to_float_sequence,
     canonicalize_smiles,
-    clean_df,
-    get_data_from_csv,
     get_edge_dim,
     get_gnn_encodings,
     get_node_dim,
@@ -31,122 +26,6 @@ TEST_SMILES = {
     "caffeine": "Cn1cnc2c1c(=O)n(c(=O)n2C)C",
     "simple_chain": "CCCC",
 }
-
-
-class TestCleanDf:
-    """Tests for clean_df function."""
-
-    def test_returns_dataframe(self):
-        """Test that clean_df returns a DataFrame."""
-        df = pd.DataFrame({"Drug": ["CCO", "CCC"], "Y": [1.0, 2.0]})
-        result = clean_df(df)
-        assert isinstance(result, pd.DataFrame)
-
-    def test_removes_invalid_smiles(self):
-        """Test that invalid SMILES are removed."""
-        df = pd.DataFrame({
-            "Drug": ["CCO", "invalid_xyz", "CCC"],
-            "Y": [1.0, 2.0, 3.0]
-        })
-        result = clean_df(df)
-        assert len(result) == 2
-
-    def test_fragment_handling_keeps_largest(self):
-        """Test that largest fragment is kept."""
-        df = pd.DataFrame({
-            "Drug": ["CCO.[Na+].[Cl-]"],  # Ethanol with salt
-            "Y": [1.0]
-        })
-        result = clean_df(df, use_largest_fragment=True)
-        # Should keep the organic part
-        assert len(result) >= 0  # May or may not be valid depending on processing
-
-    def test_min_atom_filter(self):
-        """Test minimum atom count filter."""
-        df = pd.DataFrame({
-            "Drug": ["C", "CC", "CCC", "CCCC", "CCCCC"],
-            "Y": [1.0, 2.0, 3.0, 4.0, 5.0]
-        })
-        result = clean_df(df, min_num_atoms=3)
-        # Should only keep molecules with >= 3 atoms
-        assert len(result) == 3  # CCC, CCCC, CCCCC
-
-    def test_preserves_labels(self):
-        """Test that labels are preserved correctly."""
-        df = pd.DataFrame({
-            "Drug": ["CCO", "CCC"],
-            "Y": [1.5, 2.5]
-        })
-        result = clean_df(df)
-        assert "Y" in result.columns
-        assert len(result["Y"]) == 2
-
-    def test_canonical_smiles_output(self):
-        """Test that output SMILES are canonical."""
-        df = pd.DataFrame({
-            "Drug": ["C(C)O", "OCC"],  # Non-canonical forms of ethanol
-            "Y": [1.0, 2.0]
-        })
-        result = clean_df(df)
-        # Both should become the same canonical SMILES
-        unique_smiles = result["Drug"].nunique()
-        assert unique_smiles == 1
-
-    def test_custom_column_names(self):
-        """Test with custom column names."""
-        df = pd.DataFrame({
-            "SMILES": ["CCO", "CCC"],
-            "Activity": [1.0, 2.0]
-        })
-        result = clean_df(df, x_label="SMILES", y_label="Activity")
-        assert "SMILES" in result.columns
-        assert "Activity" in result.columns
-
-
-class TestGetDataFromCsv:
-    """Tests for get_data_from_csv function."""
-
-    def test_reads_csv_correctly(self):
-        """Test that CSV is read correctly."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-            f.write("Drug,Y\n")
-            f.write("CCO,1.0\n")
-            f.write("CCC,2.0\n")
-            temp_path = f.name
-
-        try:
-            result = get_data_from_csv(temp_path, "Drug", "Y")
-            assert isinstance(result, pd.DataFrame)
-            assert len(result) == 2
-        finally:
-            Path(temp_path).unlink()
-
-    def test_custom_separator(self):
-        """Test reading CSV with custom separator."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as f:
-            f.write("Drug\tY\n")
-            f.write("CCO\t1.0\n")
-            temp_path = f.name
-
-        try:
-            result = get_data_from_csv(temp_path, "Drug", "Y", sep="\t")
-            assert len(result) == 1
-        finally:
-            Path(temp_path).unlink()
-
-    def test_custom_column_names(self):
-        """Test reading CSV with custom column names."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-            f.write("SMILES,Activity\n")
-            f.write("CCO,1.0\n")
-            temp_path = f.name
-
-        try:
-            result = get_data_from_csv(temp_path, "SMILES", "Activity")
-            assert "SMILES" in result.columns
-            assert "Activity" in result.columns
-        finally:
-            Path(temp_path).unlink()
 
 
 class TestGetRingMembershipStats:
