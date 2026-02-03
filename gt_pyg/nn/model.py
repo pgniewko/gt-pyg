@@ -1,7 +1,6 @@
 import logging
 from typing import Optional, List, Tuple, Union, Dict, Any
 from pathlib import Path
-from datetime import datetime
 
 import torch
 
@@ -425,33 +424,23 @@ class GraphTransformerNet(nn.Module):
             best_metric: Best validation metric.
             extra: Additional user data.
         """
-        path = Path(path)
-        if path.suffix != ".pt":
-            path = path.with_suffix(".pt")
-        path.parent.mkdir(parents=True, exist_ok=True)
+        from .checkpoint import save_checkpoint
 
-        checkpoint = {
-            "checkpoint_version": 1,
-            "created_at": datetime.utcnow().isoformat(),
-            "model_config": self.get_config(),
-            "model_state_dict": self.state_dict(),
-            "frozen_status": self.get_frozen_status(),
-        }
+        merged_extra = {"frozen_status": self.get_frozen_status()}
+        if extra:
+            merged_extra.update(extra)
 
-        if optimizer is not None:
-            checkpoint["optimizer_state_dict"] = optimizer.state_dict()
-        if scheduler is not None:
-            checkpoint["scheduler_state_dict"] = scheduler.state_dict()
-        if epoch is not None:
-            checkpoint["epoch"] = epoch
-        if global_step is not None:
-            checkpoint["global_step"] = global_step
-        if best_metric is not None:
-            checkpoint["best_metric"] = best_metric
-        if extra is not None:
-            checkpoint["extra"] = extra
-
-        torch.save(checkpoint, path)
+        save_checkpoint(
+            model=self,
+            path=path,
+            config=self.get_config(),
+            optimizer=optimizer,
+            scheduler=scheduler,
+            epoch=epoch,
+            global_step=global_step,
+            best_metric=best_metric,
+            extra=merged_extra,
+        )
 
     @classmethod
     def load_checkpoint(
@@ -471,7 +460,9 @@ class GraphTransformerNet(nn.Module):
         Returns:
             Tuple of (model, checkpoint_dict).
         """
-        checkpoint = torch.load(path, map_location=map_location, weights_only=False)
+        from .checkpoint import load_checkpoint
+
+        checkpoint = load_checkpoint(path, map_location=map_location)
         model = cls.from_config(checkpoint["model_config"])
         model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
         return model, checkpoint
@@ -490,7 +481,9 @@ class GraphTransformerNet(nn.Module):
             map_location: Device mapping.
             strict: Enforce state_dict key matching (set False for transfer learning).
         """
-        checkpoint = torch.load(path, map_location=map_location, weights_only=False)
+        from .checkpoint import load_checkpoint
+
+        checkpoint = load_checkpoint(path, map_location=map_location)
 
         if "model_config" in checkpoint:
             saved_config = checkpoint["model_config"]
