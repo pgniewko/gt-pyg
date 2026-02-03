@@ -124,7 +124,23 @@ To reproduce the original (ungated) Graph Transformer, set
 -   Small datasets are handled as in-memory lists of `Data` objects,
     avoiding custom dataset definitions.
 
---- 
+---
+
+## Developers
+
+### Installation (dev)
+
+```bash
+pip install -e ".[dev]"
+```
+
+### Running tests
+
+```bash
+pytest gt_pyg/ -v
+```
+
+---
 
 ## REFERENCES
 
