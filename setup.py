@@ -10,5 +10,8 @@ setup(
         "numpy",
         "rdkit",
     ],
+    extras_require={
+        "dev": ["pytest>=7.0"],
+    },
     include_package_data=True,
 )

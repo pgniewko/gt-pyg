@@ -1,6 +1,10 @@
-from typing import Optional, List, Tuple, Union
+import logging
+from typing import Optional, List, Tuple, Union, Dict, Any
+from pathlib import Path
 
 import torch
+
+logger = logging.getLogger(__name__)
 from torch import nn, Tensor
 from torch_geometric.data import Batch
 from torch_geometric.nn.aggr import MultiAggregation
@@ -35,6 +39,23 @@ class GraphTransformerNet(nn.Module):
         num_tasks: int = 1,
     ) -> None:
         super().__init__()
+
+        # Store config for checkpointing
+        self._config = {
+            "node_dim_in": node_dim_in,
+            "edge_dim_in": edge_dim_in,
+            "hidden_dim": hidden_dim,
+            "norm": norm,
+            "gate": gate,
+            "qkv_bias": qkv_bias,
+            "num_gt_layers": num_gt_layers,
+            "num_heads": num_heads,
+            "gt_aggregators": list(gt_aggregators),
+            "aggregators": list(aggregators),
+            "act": act,
+            "dropout": dropout,
+            "num_tasks": num_tasks,
+        }
 
         if num_tasks <= 0:
             raise ValueError("num_tasks must be >= 1")
@@ -247,4 +268,231 @@ class GraphTransformerNet(nn.Module):
             pred = mu                   # deterministic mean
 
         return pred, log_var
+
+
+    def _get_component_modules(self, name: str) -> List[nn.Module]:
+        """Map component name to list of modules."""
+        embeddings = [self.node_emb] + ([self.edge_emb] if self.edge_emb else [])
+        encoder = [self.input_norm, self.input_dropout] + list(self.gt_layers)
+        heads = [self.readout_norm, self.readout_dropout, self.mu_mlp, self.log_var_mlp]
+        pooling = [self.global_pool]
+
+        components = {
+            "embeddings": embeddings,
+            "encoder": encoder,
+            "gt_layers": list(self.gt_layers),
+            "heads": heads,
+            "pooling": pooling,
+            "all": embeddings + encoder + heads + pooling,
+        }
+        # Handle gt_layer_{i}
+        if name.startswith("gt_layer_"):
+            idx = int(name.split("_")[-1])
+            if idx < 0 or idx >= len(self.gt_layers):
+                raise ValueError(f"Invalid layer index: {idx}. Model has {len(self.gt_layers)} layers.")
+            return [self.gt_layers[idx]]
+
+        if name not in components:
+            raise ValueError(f"Unknown component: '{name}'. Valid: {sorted(components.keys())}")
+        return components[name]
+
+    def _set_requires_grad(self, modules: List[nn.Module], requires_grad: bool) -> None:
+        """Set requires_grad for all params in modules. Handles BatchNorm eval mode."""
+        for module in modules:
+            for param in module.parameters():
+                param.requires_grad = requires_grad
+            # Set BatchNorm to eval mode when freezing
+            for m in module.modules():
+                if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+                    if requires_grad:
+                        m.train()
+                    else:
+                        m.eval()
+
+    def freeze(
+        self,
+        components: Optional[Union[str, List[str]]] = None,
+        exclude: Optional[Union[str, List[str]]] = None,
+    ) -> "GraphTransformerNet":
+        """
+        Freeze model components (set requires_grad=False).
+
+        Args:
+            components: Component(s) to freeze. None or "all" freezes everything.
+                Options: "embeddings", "encoder", "gt_layers", "gt_layer_0", ..., "heads", "pooling", "all"
+            exclude: Component(s) to exclude from freezing.
+
+        Returns:
+            self for method chaining.
+        """
+        if components is None:
+            components = ["all"]
+        elif isinstance(components, str):
+            components = [components]
+
+        if exclude is None:
+            exclude = []
+        elif isinstance(exclude, str):
+            exclude = [exclude]
+
+        # Get modules to freeze
+        to_freeze = set()
+        for comp in components:
+            for m in self._get_component_modules(comp):
+                to_freeze.add(m)
+
+        # Remove excluded modules
+        for comp in exclude:
+            for m in self._get_component_modules(comp):
+                to_freeze.discard(m)
+
+        self._set_requires_grad(list(to_freeze), requires_grad=False)
+        return self
+
+    def unfreeze(
+        self,
+        components: Optional[Union[str, List[str]]] = None,
+    ) -> "GraphTransformerNet":
+        """
+        Unfreeze model components (set requires_grad=True).
+
+        Args:
+            components: Component(s) to unfreeze. None or "all" unfreezes everything.
+
+        Returns:
+            self for method chaining.
+        """
+        if components is None:
+            components = ["all"]
+        elif isinstance(components, str):
+            components = [components]
+
+        to_unfreeze = []
+        for comp in components:
+            to_unfreeze.extend(self._get_component_modules(comp))
+
+        self._set_requires_grad(to_unfreeze, requires_grad=True)
+        return self
+
+    def get_frozen_status(self) -> Dict[str, bool]:
+        """
+        Get freeze status for each component group.
+
+        Returns:
+            Dict mapping component name to True if all params are frozen.
+        """
+        status = {}
+        for name in ["embeddings", "encoder", "gt_layers", "heads", "pooling"]:
+            modules = self._get_component_modules(name)
+            all_frozen = all(
+                not p.requires_grad
+                for m in modules
+                for p in m.parameters()
+            )
+            status[name] = all_frozen
+        return status
+
+
+    def get_config(self) -> Dict[str, Any]:
+        """Return model config for reconstruction."""
+        return dict(self._config)
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "GraphTransformerNet":
+        """Create model from config dict."""
+        return cls(**config)
+
+    def save_checkpoint(
+        self,
+        path: Union[str, Path],
+        optimizer: Optional[torch.optim.Optimizer] = None,
+        scheduler: Optional[Any] = None,
+        epoch: Optional[int] = None,
+        global_step: Optional[int] = None,
+        best_metric: Optional[float] = None,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Save checkpoint to disk.
+
+        Args:
+            path: File path (.pt extension added if missing).
+            optimizer: Optimizer to save state.
+            scheduler: LR scheduler to save state.
+            epoch: Current epoch number.
+            global_step: Global training step.
+            best_metric: Best validation metric.
+            extra: Additional user data.
+        """
+        from .checkpoint import save_checkpoint
+
+        merged_extra = {"frozen_status": self.get_frozen_status()}
+        if extra:
+            merged_extra.update(extra)
+
+        save_checkpoint(
+            model=self,
+            path=path,
+            config=self.get_config(),
+            optimizer=optimizer,
+            scheduler=scheduler,
+            epoch=epoch,
+            global_step=global_step,
+            best_metric=best_metric,
+            extra=merged_extra,
+        )
+
+    @classmethod
+    def load_checkpoint(
+        cls,
+        path: Union[str, Path],
+        map_location: Optional[Union[str, torch.device]] = None,
+        strict: bool = True,
+    ) -> Tuple["GraphTransformerNet", Dict[str, Any]]:
+        """
+        Load model from checkpoint.
+
+        Args:
+            path: Checkpoint file path.
+            map_location: Device mapping (e.g., "cpu", "cuda:0").
+            strict: Enforce state_dict key matching.
+
+        Returns:
+            Tuple of (model, checkpoint_dict).
+        """
+        from .checkpoint import load_checkpoint
+
+        checkpoint = load_checkpoint(path, map_location=map_location)
+        model = cls.from_config(checkpoint["model_config"])
+        model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
+        return model, checkpoint
+
+    def load_weights(
+        self,
+        path: Union[str, Path],
+        map_location: Optional[Union[str, torch.device]] = None,
+        strict: bool = True,
+    ) -> None:
+        """
+        Load weights from checkpoint into this model instance.
+
+        Args:
+            path: Checkpoint file path.
+            map_location: Device mapping.
+            strict: Enforce state_dict key matching (set False for transfer learning).
+        """
+        from .checkpoint import load_checkpoint
+
+        checkpoint = load_checkpoint(path, map_location=map_location)
+
+        if "model_config" in checkpoint:
+            saved_config = checkpoint["model_config"]
+            current_config = self.get_config()
+            if saved_config != current_config:
+                logger.warning(
+                    f"Architecture mismatch between checkpoint and model. "
+                    f"Saved: {saved_config}, Current: {current_config}"
+                )
+
+        self.load_state_dict(checkpoint["model_state_dict"], strict=strict)
 
