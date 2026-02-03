@@ -1,8 +1,11 @@
+import logging
 from typing import Optional, List, Tuple, Union, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
 import torch
+
+logger = logging.getLogger(__name__)
 from torch import nn, Tensor
 from torch_geometric.data import Batch
 from torch_geometric.nn.aggr import MultiAggregation
@@ -267,7 +270,6 @@ class GraphTransformerNet(nn.Module):
 
         return pred, log_var
 
-    # ---- Freeze / Unfreeze ----
 
     def _get_component_modules(self, name: str) -> List[nn.Module]:
         """Map component name to list of modules."""
@@ -391,7 +393,6 @@ class GraphTransformerNet(nn.Module):
             status[name] = all_frozen
         return status
 
-    # ---- Config / Checkpoint ----
 
     def get_config(self) -> Dict[str, Any]:
         """Return model config for reconstruction."""
@@ -487,8 +488,18 @@ class GraphTransformerNet(nn.Module):
         Args:
             path: Checkpoint file path.
             map_location: Device mapping.
-            strict: Enforce state_dict key matching.
+            strict: Enforce state_dict key matching (set False for transfer learning).
         """
         checkpoint = torch.load(path, map_location=map_location, weights_only=False)
+
+        if "model_config" in checkpoint:
+            saved_config = checkpoint["model_config"]
+            current_config = self.get_config()
+            if saved_config != current_config:
+                logger.warning(
+                    f"Architecture mismatch between checkpoint and model. "
+                    f"Saved: {saved_config}, Current: {current_config}"
+                )
+
         self.load_state_dict(checkpoint["model_state_dict"], strict=strict)
 
