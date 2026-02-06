@@ -1,10 +1,13 @@
 """Tests for GraphTransformerNet freeze/unfreeze and checkpoint functionality."""
 
+import logging
+
 import pytest
 import torch
 from torch import nn
 
-from gt_pyg.nn import GraphTransformerNet, get_checkpoint_info
+import gt_pyg
+from gt_pyg.nn import GraphTransformerNet, get_checkpoint_info, load_checkpoint
 
 
 @pytest.fixture
@@ -199,3 +202,63 @@ def test_transfer_learning(model, sample_input, tmp_path):
     # Verify gradients only on unfrozen params
     assert model2.mu_mlp.mlp[0].weight.grad is not None
     assert model2.node_emb.weight.grad is None
+
+
+# ---- Version Tests ----
+
+def test_version_is_defined():
+    """gt_pyg.__version__ is a non-empty string."""
+    assert isinstance(gt_pyg.__version__, str)
+    assert gt_pyg.__version__ != ""
+
+
+def test_checkpoint_saves_version(model, tmp_path):
+    """Checkpoint contains gt_pyg_version matching current version."""
+    path = tmp_path / "model.pt"
+    model.save_checkpoint(path)
+
+    raw = torch.load(path, map_location="cpu", weights_only=False)
+    assert "gt_pyg_version" in raw
+    assert raw["gt_pyg_version"] == gt_pyg.__version__
+
+
+def test_checkpoint_version_mismatch_warning(model, tmp_path, caplog):
+    """Loading a checkpoint from a different version logs a warning."""
+    path = tmp_path / "model.pt"
+    model.save_checkpoint(path)
+
+    # Tamper with the saved version
+    raw = torch.load(path, map_location="cpu", weights_only=False)
+    raw["gt_pyg_version"] = "0.0.0"
+    torch.save(raw, path)
+
+    with caplog.at_level(logging.WARNING, logger="gt_pyg.nn.checkpoint"):
+        load_checkpoint(path)
+
+    assert any("was saved with gt-pyg 0.0.0" in msg for msg in caplog.messages)
+
+
+def test_checkpoint_missing_version_warning(model, tmp_path, caplog):
+    """Loading an old checkpoint with no version field logs a warning."""
+    path = tmp_path / "model.pt"
+    model.save_checkpoint(path)
+
+    # Remove the version field to simulate an old checkpoint
+    raw = torch.load(path, map_location="cpu", weights_only=False)
+    del raw["gt_pyg_version"]
+    torch.save(raw, path)
+
+    with caplog.at_level(logging.WARNING, logger="gt_pyg.nn.checkpoint"):
+        load_checkpoint(path)
+
+    assert any("no gt_pyg_version field" in msg for msg in caplog.messages)
+
+
+def test_checkpoint_info_includes_version(model, tmp_path):
+    """get_checkpoint_info returns gt_pyg_version."""
+    path = tmp_path / "model.pt"
+    model.save_checkpoint(path)
+
+    info = get_checkpoint_info(path)
+    assert "gt_pyg_version" in info
+    assert info["gt_pyg_version"] == gt_pyg.__version__
