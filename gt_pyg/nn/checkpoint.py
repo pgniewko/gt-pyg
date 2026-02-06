@@ -1,9 +1,14 @@
 """Checkpoint utilities for gt-pyg models."""
 
+import logging
 from typing import Dict, Any, Optional, Union
 from pathlib import Path
 
 import torch
+
+from gt_pyg import __version__
+
+logger = logging.getLogger(__name__)
 
 CHECKPOINT_VERSION = 1
 
@@ -42,6 +47,7 @@ def save_checkpoint(
 
     checkpoint = {
         "checkpoint_version": CHECKPOINT_VERSION,
+        "gt_pyg_version": __version__,
         "created_at": datetime.utcnow().isoformat(),
         "model_state_dict": model.state_dict(),
     }
@@ -78,7 +84,26 @@ def load_checkpoint(
     Returns:
         Checkpoint dict with state_dict, config, etc.
     """
-    return torch.load(path, map_location=map_location, weights_only=False)
+    checkpoint = torch.load(path, map_location=map_location, weights_only=False)
+
+    saved_version = checkpoint.get("gt_pyg_version")
+    if saved_version is None:
+        logger.warning(
+            "Checkpoint '%s' has no gt_pyg_version field; "
+            "it may have been created with an older version of gt-pyg.",
+            path,
+        )
+    elif saved_version != __version__:
+        logger.warning(
+            "Checkpoint '%s' was saved with gt-pyg %s, "
+            "but the current version is %s. "
+            "Behaviour may differ.",
+            path,
+            saved_version,
+            __version__,
+        )
+
+    return checkpoint
 
 
 def get_checkpoint_info(path: Union[str, Path]) -> Dict[str, Any]:
@@ -93,8 +118,9 @@ def get_checkpoint_info(path: Union[str, Path]) -> Dict[str, Any]:
     """
     checkpoint = torch.load(path, map_location="cpu", weights_only=False)
     info = {}
-    for key in ["checkpoint_version", "created_at", "model_config", "epoch",
-                "global_step", "best_metric", "frozen_status", "extra"]:
+    for key in ["checkpoint_version", "gt_pyg_version", "created_at",
+                "model_config", "epoch", "global_step", "best_metric",
+                "frozen_status", "extra"]:
         if key in checkpoint:
             info[key] = checkpoint[key]
     return info
