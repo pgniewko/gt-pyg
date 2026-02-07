@@ -90,6 +90,40 @@ def test_get_frozen_status(model):
     assert status["heads"] is False
 
 
+def test_get_frozen_status_unfrozen(model):
+    """All components report False on a fresh model."""
+    status = model.get_frozen_status()
+    for name in ["embeddings", "encoder", "gt_layers", "heads"]:
+        assert status[name] is False
+
+
+def test_get_frozen_status_parameterless():
+    """Parameterless components report None instead of vacuous True."""
+    model = GraphTransformerNet(
+        node_dim_in=16,
+        edge_dim_in=8,
+        hidden_dim=32,
+        num_gt_layers=2,
+        num_heads=4,
+        norm="bn",
+        aggregators=["sum"],  # sum pooling has no learnable params
+    )
+    status = model.get_frozen_status()
+    assert status["pooling"] is None
+
+
+def test_get_frozen_status_after_freeze_unfreeze(model):
+    """Status reflects freeze then partial unfreeze."""
+    model.freeze("all")
+    model.unfreeze("heads")
+
+    status = model.get_frozen_status()
+    assert status["embeddings"]
+    assert status["encoder"]
+    assert status["gt_layers"]
+    assert not status["heads"]
+
+
 def test_batchnorm_eval(model):
     """BatchNorm set to eval mode when frozen."""
     model.train()
