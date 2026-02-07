@@ -26,7 +26,7 @@ NEG_IONIZABLE_SMARTS = Chem.MolFromSmarts("[CX3](=O)[O-,OH]")
 # -----------------------------
 RING_COUNT_CATEGORIES = [0, 1, 2, 3, "MoreThanThree"]
 RING_SIZE_CATEGORIES = [3, 4, 5, 6, 7, 8, 9, 10, "MoreThanTen"]
-PERIOD_CATEGORIES = [1, 2, 3, 4, 5, 6, 7]
+PERIOD_CATEGORIES = [0, 1, 2, 3, 4, 5, 6, 7]
 # 0 is used for "no group / undefined" (e.g. some f-block elements if RDKit returns 0)
 GROUP_CATEGORIES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
@@ -168,7 +168,10 @@ def get_period(atomic_num: int) -> int:
     # Period 6: Cs(55) to Rn(86)
     # Period 7: Fr(87) onwards
     if atomic_num <= 0:
-        return 1
+        logging.warning(
+            "Dummy/invalid atomic number %d mapped to period 0", atomic_num,
+        )
+        return 0
     elif atomic_num <= 2:
         return 1
     elif atomic_num <= 10:
