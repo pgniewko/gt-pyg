@@ -26,7 +26,7 @@ class GTConv(MessagePassing):
         dropout: float = 0.0,
         norm: str = "ln",        # changed default to LN for transformer-like behavior
         act: str = "gelu",       # changed default to GELU
-        aggregators: List[str] = ["sum"],
+        aggregators: Optional[List[str]] = None,
     ):
         """
         Graph Transformer Convolution (GTConv) module. 
@@ -48,6 +48,9 @@ class GTConv(MessagePassing):
             act (str, optional): Activation function name for FFNs. Default is "gelu".
             aggregators (List[str], optional): MultiAggregation methods. Default ["sum"].
         """
+        if aggregators is None:
+            aggregators = ["sum"]
+
         # Choose aggregation
         if len(aggregators) == 1 and aggregators[0] == "sum":
             aggr = "add"
@@ -56,8 +59,12 @@ class GTConv(MessagePassing):
 
         super().__init__(node_dim=0, aggr=aggr)
 
-        assert hidden_dim % num_heads == 0
-        assert (edge_in_dim is None) or (edge_in_dim > 0)
+        if hidden_dim % num_heads != 0:
+            raise ValueError(
+                f"hidden_dim ({hidden_dim}) must be divisible by num_heads ({num_heads})"
+            )
+        if edge_in_dim is not None and edge_in_dim <= 0:
+            raise ValueError(f"edge_in_dim must be positive or None, got {edge_in_dim}")
 
         self.aggregators = aggregators
         self.num_aggrs = len(aggregators)
