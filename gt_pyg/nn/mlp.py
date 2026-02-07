@@ -47,8 +47,8 @@ class MLP(nn.Module):
         if isinstance(hidden_dims, int):
             hidden_dims = [hidden_dims] * max(num_hidden_layers, 0)
 
-        if num_hidden_layers > 0:
-            assert len(hidden_dims) == num_hidden_layers, (
+        if num_hidden_layers > 0 and len(hidden_dims) != num_hidden_layers:
+            raise ValueError(
                 f"hidden_dims length ({len(hidden_dims)}) "
                 f"must equal num_hidden_layers ({num_hidden_layers})"
             )
