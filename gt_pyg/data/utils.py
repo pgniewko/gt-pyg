@@ -35,21 +35,16 @@ from .bond_features import (
 __SMILES = "c1ccccc1"
 
 
-def get_node_dim(gnm: bool = True) -> int:
+def get_node_dim() -> int:
     """Return the dimensionality of the node feature vector.
 
-    This is equivalent to ``get_atom_feature_dim(gnm=gnm)`` and is provided
+    This is equivalent to ``get_atom_feature_dim()`` and is provided
     as a convenience alias.
-
-    Args:
-        gnm (bool, optional): Whether the GNM (Kirchhoff diagonal) encoding is
-            included.  Must match the ``gnm`` flag passed to
-            :func:`get_tensor_data`.  Defaults to ``True``.
 
     Returns:
         int: Number of features per node.
     """
-    return get_atom_feature_dim(gnm=gnm)
+    return get_atom_feature_dim()
 
 
 def get_edge_dim() -> int:
@@ -284,8 +279,9 @@ def get_tensor_data(
         x_smiles (List[str]): SMILES strings.
         y (List[Union[float, int, Sequence[Optional[float]], np.ndarray]]): Per-sample labels:
             single float/int (single-task) or a sequence/array (multi-task).
-        gnm (bool, optional): If True, append GNM-style diagonal terms to node features.
-            Defaults to ``True``.
+        gnm (bool, optional): If True, compute the GNM (Kirchhoff pseudoinverse
+            diagonal) and populate the corresponding node feature.  When False
+            the feature is left at ``0.0``.  Defaults to ``True``.
 
     Returns:
         List[Data]: One ``Data`` per sample with fields:

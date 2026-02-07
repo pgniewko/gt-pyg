@@ -237,8 +237,8 @@ def get_atom_features(
         - Pharmacophore flags (5 binary):
             - H-bond donor, H-bond acceptor, hydrophobic,
               positive ionizable, negative ionizable
-        - GNM encoding (1 continuous, optional):
-            - Kirchhoff pseudoinverse diagonal value
+        - GNM encoding (1 continuous):
+            - Kirchhoff pseudoinverse diagonal value (0.0 when GNM is disabled)
 
     Args:
         atom (Chem.Atom): RDKit atom.
@@ -249,8 +249,7 @@ def get_atom_features(
         pharmacophore_flags (dict, optional): Precomputed pharmacophore flags from
             ``get_pharmacophore_flags(mol)``.
         gnm_value (float, optional): Kirchhoff pseudoinverse diagonal value for
-            this atom.  When not ``None`` the value is appended to the feature
-            vector.  Defaults to ``None``.
+            this atom.  Defaults to ``0.0`` when ``None``.
 
     Returns:
         np.ndarray: Atom feature vector.
@@ -363,8 +362,7 @@ def get_atom_features(
     atom_feature_vector += flags
 
     # GNM encoding (Kirchhoff pseudoinverse diagonal)
-    if gnm_value is not None:
-        atom_feature_vector += [gnm_value]
+    atom_feature_vector += [gnm_value if gnm_value is not None else 0.0]
 
     return np.array(atom_feature_vector)
 
@@ -372,14 +370,13 @@ def get_atom_features(
 def get_atom_feature_dim(
     use_chirality: bool = True,
     hydrogens_implicit: bool = True,
-    gnm: bool = True,
 ) -> int:
     """Return the dimensionality of the atom feature vector.
 
     Calculates the expected length of the feature vector based on the
-    configuration options.  When ``gnm=True`` (the default), the returned
-    dimension includes the Kirchhoff pseudoinverse diagonal term that is
-    appended by :func:`get_tensor_data`, so the value matches
+    configuration options.  The returned dimension includes the GNM
+    (Kirchhoff pseudoinverse diagonal) term appended by
+    :func:`get_tensor_data`, so the value matches
     :func:`~gt_pyg.data.utils.get_node_dim`.
 
     Args:
@@ -387,8 +384,6 @@ def get_atom_feature_dim(
             Defaults to ``True``.
         hydrogens_implicit (bool, optional): Whether implicit hydrogen features are included.
             Defaults to ``True``.
-        gnm (bool, optional): Whether the GNM (Kirchhoff diagonal) encoding is
-            included.  Defaults to ``True``.
 
     Returns:
         int: Number of features in the atom feature vector.
@@ -401,6 +396,5 @@ def get_atom_feature_dim(
         use_chirality=use_chirality,
         hydrogens_implicit=hydrogens_implicit,
         atom_ring_stats=None,
-        gnm_value=0.0 if gnm else None,
     )
     return len(features)
