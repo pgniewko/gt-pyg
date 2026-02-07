@@ -226,7 +226,7 @@ def get_group(atomic_num: int) -> int:
 
 def get_atom_features(
     atom: Chem.Atom,
-    use_chirality: bool = True,
+    use_stereochemistry: bool = True,
     hydrogens_implicit: bool = True,
     atom_ring_stats: Optional[Dict[int, Dict[str, Any]]] = None,
     pharmacophore_flags: Optional[Dict[int, List[int]]] = None,
@@ -255,7 +255,7 @@ def get_atom_features(
 
     Args:
         atom (Chem.Atom): RDKit atom.
-        use_chirality (bool, optional): Include chirality (R/S, chiral tag). Defaults to ``True``.
+        use_stereochemistry (bool, optional): Include stereochemistry (R/S, chiral tag). Defaults to ``True``.
         hydrogens_implicit (bool, optional): Include implicit hydrogen count features.
             Defaults to ``True``.
         atom_ring_stats (dict, optional): Precomputed ring stats for atoms.
@@ -305,7 +305,7 @@ def get_atom_features(
     group_enc = one_hot_encoding(group, GROUP_CATEGORIES)
     atom_feature_vector += group_enc
 
-    if use_chirality:
+    if use_stereochemistry:
         chirality_type_enc = one_hot_encoding(
             str(atom.GetChiralTag()),
             ["CHI_UNSPECIFIED", "CHI_TETRAHEDRAL_CW", "CHI_TETRAHEDRAL_CCW", "CHI_OTHER"],
@@ -381,7 +381,7 @@ def get_atom_features(
 
 
 def get_atom_feature_dim(
-    use_chirality: bool = True,
+    use_stereochemistry: bool = True,
     hydrogens_implicit: bool = True,
 ) -> int:
     """Return the dimensionality of the atom feature vector.
@@ -392,7 +392,7 @@ def get_atom_feature_dim(
     :func:`get_tensor_data`.
 
     Args:
-        use_chirality (bool, optional): Whether chirality features are included.
+        use_stereochemistry (bool, optional): Whether stereochemistry features are included.
             Defaults to ``True``.
         hydrogens_implicit (bool, optional): Whether implicit hydrogen features are included.
             Defaults to ``True``.
@@ -405,7 +405,7 @@ def get_atom_feature_dim(
     atom = mol.GetAtomWithIdx(0)
     features = get_atom_features(
         atom,
-        use_chirality=use_chirality,
+        use_stereochemistry=use_stereochemistry,
         hydrogens_implicit=hydrogens_implicit,
         atom_ring_stats=None,
     )

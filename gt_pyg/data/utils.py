@@ -321,7 +321,7 @@ def get_tensor_data(
             idx = atom.GetIdx()
             atom_feats = get_atom_features(
                 atom,
-                use_chirality=True,
+                use_stereochemistry=True,
                 hydrogens_implicit=True,
                 atom_ring_stats=atom_ring_stats,
                 pharmacophore_flags=pharmacophore_flags,
