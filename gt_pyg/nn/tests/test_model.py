@@ -118,10 +118,10 @@ def test_get_frozen_status_after_freeze_unfreeze(model):
     model.unfreeze("heads")
 
     status = model.get_frozen_status()
-    assert status["embeddings"] is True
-    assert status["encoder"] is True
-    assert status["gt_layers"] is True
-    assert status["heads"] is False
+    assert status["embeddings"]
+    assert status["encoder"]
+    assert status["gt_layers"]
+    assert not status["heads"]
 
 
 def test_batchnorm_eval(model):
