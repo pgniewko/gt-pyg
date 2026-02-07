@@ -390,9 +390,9 @@ def get_atom_feature_dim(
     """Return the dimensionality of the atom feature vector.
 
     Calculates the expected length of the feature vector based on the
-    configuration options.  The returned dimension includes the GNM
-    (Kirchhoff pseudoinverse diagonal) term appended by
-    :func:`get_tensor_data`.
+    configuration options.  This does **not** include the GNM
+    (Kirchhoff pseudoinverse diagonal) term, which is appended
+    separately by :func:`get_tensor_data`.
 
     Args:
         use_stereochemistry (bool, optional): Whether stereochemistry features are included.

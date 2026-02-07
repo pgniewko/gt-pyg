@@ -8,7 +8,7 @@ dependencies:
   - ncurses=6.4=hcec6c5f_0
   - openssl=1.1.1t=hca72f7f_0
   - pip=22.3.1=py37hecd8cb5_0
-  - python=3.7.16=h218abb5_0
+  - python=3.10
   - readline=8.2=hca72f7f_0
   - setuptools=65.6.3=py37hecd8cb5_0
   - sqlite=3.41.2=h6c40b1e_0

@@ -330,6 +330,9 @@ class GTConv(MessagePassing):
         V_j: [E, H, Dh]
         G_j: [E, H, Dh] or None
         edge_attr: [E, edge_in_dim] or None
+
+        Returns:
+            Tensor: Attention-weighted values [E, H, Dh].
         """
         Dh = self.head_dim
 

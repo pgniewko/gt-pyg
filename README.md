@@ -61,7 +61,7 @@ gt = GTConv(node_in_dim=num_node_features,
             edge_in_dim=num_edge_features,
             hidden_dim=15,
             num_heads=3)
-gt(x=x, edge_index=edge_index, edge_attr=edge_attr)
+x_out, edge_out = gt(x=x, edge_index=edge_index, edge_attr=edge_attr)
 ```
 
 The code also supports custom datasets. For example, if you have a file called `solubility.csv`

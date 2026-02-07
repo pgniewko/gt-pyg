@@ -38,6 +38,7 @@ class GraphTransformerNet(nn.Module):
         dropout: float = 0.1,
         num_tasks: int = 1,
     ) -> None:
+        """Initialize the Graph Transformer network."""
         super().__init__()
 
         if gt_aggregators is None:
