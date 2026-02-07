@@ -32,13 +32,18 @@ class GraphTransformerNet(nn.Module):
         qkv_bias: bool = False,
         num_gt_layers: int = 4,
         num_heads: int = 8,
-        gt_aggregators: List[str] = ["sum"],
-        aggregators: List[str] = ["sum"],
+        gt_aggregators: Optional[List[str]] = None,
+        aggregators: Optional[List[str]] = None,
         act: str = "gelu",
         dropout: float = 0.1,
         num_tasks: int = 1,
     ) -> None:
         super().__init__()
+
+        if gt_aggregators is None:
+            gt_aggregators = ["sum"]
+        if aggregators is None:
+            aggregators = ["sum"]
 
         # Store config for checkpointing
         self._config = {
