@@ -10,16 +10,42 @@ from rdkit import Chem
 # -----------------------------
 # Pharmacophore SMARTS patterns (precompiled at module load)
 # -----------------------------
-# H-bond donor: N or O with at least one hydrogen
-HBD_SMARTS = Chem.MolFromSmarts("[#7,#8;!H0]")
-# H-bond acceptor: N or O that is not part of a hetero=hetero bond
-HBA_SMARTS = Chem.MolFromSmarts("[#7,#8;!$([#7,#8]=[!#6])]")
-# Hydrophobic: Carbon not attached to heteroatoms
-HYDROPHOBIC_SMARTS = Chem.MolFromSmarts("[C;!$(C~[#7,#8,#9,#15,#16,#17,#35,#53])]")
-# Positive ionizable: Nitrogen with positive charge or protonated amines
-POS_IONIZABLE_SMARTS = Chem.MolFromSmarts("[#7;+,H2,H3]")
-# Negative ionizable: Carboxylic acid or carboxylate
-NEG_IONIZABLE_SMARTS = Chem.MolFromSmarts("[CX3](=O)[O-,OH]")
+# H-bond donor: N-H (trivalent or protonated), O-H, S-H, aromatic N-H
+# Based on RDKit Lipinski/Gobbi donor definition
+HBD_SMARTS = Chem.MolFromSmarts(
+    "[$([N;!H0;v3]),$([N;!H0;+1;v4]),$([O,S;H1;+0]),$([n;H1;+0])]"
+)
+# H-bond acceptor: divalent O/S, charged O/S, trivalent N (not amide), aromatic heteroatoms
+# Adapted from RDKit Lipinski HAcceptorSmarts (rev. Nov 2008)
+HBA_SMARTS = Chem.MolFromSmarts(
+    "[$([O,S;H1;v2;!$(*-*=[O,N,P,S])]),$([O,S;H0;v2]),$([O,S;-]),"
+    "$([N;v3;!$(N-*=!@[O,N,P,S])]),$([nH0,o,s;+0])]"
+)
+# Hydrophobic: any neutral carbon not bonded to N, O, or F
+# Aligned with RDKit BaseFeatures.fdef Carbon_NonPolar definition
+HYDROPHOBIC_SMARTS = Chem.MolFromSmarts("[#6;+0;!$([#6]~[#7,#8,#9])]")
+# Positive ionizable: basic amines (not amides/anilines), protonated N,
+#   imidazole, guanidine
+# Adapted from RDKit BaseFeatures.fdef
+POS_IONIZABLE_SMARTS = Chem.MolFromSmarts(
+    "[$([N;H2&+0][C;!$(C=O)]),"               # primary amine (not amide)
+    "$([N;H1&+0]([C;!$(C=O)])[C;!$(C=O)]),"   # secondary amine (not amide)
+    "$([N;H0&+0]([C;!$(C=O)])([C;!$(C=O)])[C;!$(C=O)]),"  # tertiary amine
+    "$([#7;+;!$([N+]-[O-])]),"                 # already protonated (not nitro)
+    "$(c1c[nH]cn1),"                           # imidazole
+    "$(NC(=N)N)"                               # guanidine
+    ";!$(N[a])]"                               # exclude anilines
+)
+# Negative ionizable: carboxylic/sulfonic acids, phosphates, tetrazoles,
+#   sulfonamide NH, boronic acids
+# Extends RDKit BaseFeatures.fdef AcidicGroup
+NEG_IONIZABLE_SMARTS = Chem.MolFromSmarts(
+    "[$([C,S](=[O,S,P])-[O;H1,H0&-1]),"      # carboxylic, sulfonic, sulfinic acids
+    "$([P](=[O])(-[O;H1,H0&-1])(-[O,C])-[O,C]),"  # phosphates/phosphonates
+    "$(c1[nH]nnn1),$(c1nn[nH]n1),"            # tetrazole (both tautomers)
+    "$([NH]S(=O)(=O)),"                        # sulfonamide NH
+    "$([B]([O;H1])([O;H1]))]"                 # boronic acid
+)
 
 # -----------------------------
 # Global category constants
