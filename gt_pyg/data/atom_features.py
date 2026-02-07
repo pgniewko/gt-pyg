@@ -1,4 +1,5 @@
 # Standard library
+import logging
 from typing import Any, Dict, List, Optional, Union
 
 # Third-party
@@ -79,9 +80,21 @@ def get_gasteiger_charge(atom: Chem.Atom, clip: float = 2.0) -> float:
     try:
         charge = float(atom.GetDoubleProp("_GasteigerCharge"))
         if np.isnan(charge) or np.isinf(charge):
+            logging.warning(
+                "Gasteiger charge is %s for atom %s (idx %d); defaulting to 0.0",
+                "NaN" if np.isnan(charge) else "Inf",
+                atom.GetSymbol(),
+                atom.GetIdx(),
+            )
             return 0.0
         return np.clip(charge, -clip, clip) / clip
-    except Exception:
+    except Exception as e:
+        logging.warning(
+            "Failed to retrieve Gasteiger charge for atom %s (idx %d): %s",
+            atom.GetSymbol(),
+            atom.GetIdx(),
+            e,
+        )
         return 0.0
 
 

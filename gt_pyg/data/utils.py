@@ -300,9 +300,8 @@ def get_tensor_data(
         # Compute Gasteiger partial charges for the entire molecule
         try:
             rdPartialCharges.ComputeGasteigerCharges(mol)
-        except Exception:
-            # If Gasteiger computation fails, charges will be 0.0 (handled in get_atom_features)
-            pass
+        except Exception as e:
+            logging.warning("Gasteiger charge computation failed for '%s': %s", smiles, e)
 
         # Compute pharmacophore flags for entire molecule
         pharmacophore_flags = get_pharmacophore_flags(mol)
