@@ -9,3 +9,5 @@ ww-img
 build/
 gt_pyg.egg-info/
 .eggs/
+.claude/
+.venv/
