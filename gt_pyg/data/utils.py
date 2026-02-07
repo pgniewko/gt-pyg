@@ -35,14 +35,21 @@ from .bond_features import (
 __SMILES = "c1ccccc1"
 
 
-def get_node_dim() -> int:
+def get_node_dim(gnn: bool = True) -> int:
     """Return the dimensionality of the node feature vector.
+
+    This is equivalent to ``get_atom_feature_dim(gnn=gnn)`` and is provided
+    as a convenience alias.
+
+    Args:
+        gnn (bool, optional): Whether the GNN (Kirchhoff diagonal) encoding is
+            included.  Must match the ``gnn`` flag passed to
+            :func:`get_tensor_data`.  Defaults to ``True``.
 
     Returns:
         int: Number of features per node.
     """
-    data = get_tensor_data([__SMILES], [0])[0]
-    return data.x.size(-1)
+    return get_atom_feature_dim(gnn=gnn)
 
 
 def get_edge_dim() -> int:
@@ -318,17 +325,15 @@ def get_tensor_data(
         x_feat = []
         for atom in mol.GetAtoms():
             idx = atom.GetIdx()
-            atom_features = get_atom_features(
+            atom_feats = get_atom_features(
                 atom,
                 use_chirality=True,
                 hydrogens_implicit=True,
                 atom_ring_stats=atom_ring_stats,
                 pharmacophore_flags=pharmacophore_flags,
+                gnn_value=dRdR[idx][idx] if dRdR is not None else None,
             )
-            if dRdR is not None:
-                x_feat.append(atom_features.tolist() + [dRdR[idx][idx]])
-            else:
-                x_feat.append(atom_features.tolist())
+            x_feat.append(atom_feats.tolist())
         x = torch.as_tensor(np.asarray(x_feat), dtype=torch.float)
 
         # Edges
