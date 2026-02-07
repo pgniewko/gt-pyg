@@ -35,21 +35,21 @@ from .bond_features import (
 __SMILES = "c1ccccc1"
 
 
-def get_node_dim(gnn: bool = True) -> int:
+def get_node_dim(gnm: bool = True) -> int:
     """Return the dimensionality of the node feature vector.
 
-    This is equivalent to ``get_atom_feature_dim(gnn=gnn)`` and is provided
+    This is equivalent to ``get_atom_feature_dim(gnm=gnm)`` and is provided
     as a convenience alias.
 
     Args:
-        gnn (bool, optional): Whether the GNN (Kirchhoff diagonal) encoding is
-            included.  Must match the ``gnn`` flag passed to
+        gnm (bool, optional): Whether the GNM (Kirchhoff diagonal) encoding is
+            included.  Must match the ``gnm`` flag passed to
             :func:`get_tensor_data`.  Defaults to ``True``.
 
     Returns:
         int: Number of features per node.
     """
-    return get_atom_feature_dim(gnn=gnn)
+    return get_atom_feature_dim(gnm=gnm)
 
 
 def get_edge_dim() -> int:
@@ -225,8 +225,8 @@ def get_ring_membership_stats(
     return atom_ring_stats, bond_ring_stats
 
 
-def get_gnn_encodings(mol: Chem.Mol) -> np.ndarray:
-    """Compute Gaussian Network Model-style encodings (inverse Kirchhoff).
+def get_gnm_encodings(mol: Chem.Mol) -> np.ndarray:
+    """Compute Gaussian Network Model (GNM) encodings (inverse Kirchhoff).
 
     Constructs the adjacency matrix, degree matrix, Laplacian (Kirchhoff) matrix,
     then returns its pseudoinverse.
@@ -272,7 +272,7 @@ def _to_float_sequence(
 def get_tensor_data(
     x_smiles: List[str],
     y: List[Union[float, int, Sequence[Optional[float]], np.ndarray]],
-    gnn: bool = True,
+    gnm: bool = True,
 ) -> List[Data]:
     """Build torch_geometric molecular graphs with labels and masks.
 
@@ -284,7 +284,7 @@ def get_tensor_data(
         x_smiles (List[str]): SMILES strings.
         y (List[Union[float, int, Sequence[Optional[float]], np.ndarray]]): Per-sample labels:
             single float/int (single-task) or a sequence/array (multi-task).
-        gnn (bool, optional): If True, append GNN-style diagonal terms to node features.
+        gnm (bool, optional): If True, append GNM-style diagonal terms to node features.
             Defaults to ``True``.
 
     Returns:
@@ -318,8 +318,8 @@ def get_tensor_data(
         # Compute pharmacophore flags for entire molecule
         pharmacophore_flags = get_pharmacophore_flags(mol)
 
-        # Optional GNN-style node augmentation
-        dRdR = get_gnn_encodings(mol) if gnn else None
+        # Optional GNM-style node augmentation
+        dRdR = get_gnm_encodings(mol) if gnm else None
 
         # Precompute ring membership stats
         atom_ring_stats, bond_ring_stats = get_ring_membership_stats(mol)
@@ -334,7 +334,7 @@ def get_tensor_data(
                 hydrogens_implicit=True,
                 atom_ring_stats=atom_ring_stats,
                 pharmacophore_flags=pharmacophore_flags,
-                gnn_value=dRdR[idx][idx] if dRdR is not None else None,
+                gnm_value=dRdR[idx][idx] if dRdR is not None else None,
             )
             x_feat.append(atom_feats.tolist())
         x = torch.as_tensor(np.asarray(x_feat), dtype=torch.float)
