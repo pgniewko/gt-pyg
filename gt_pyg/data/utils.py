@@ -145,15 +145,13 @@ def get_ring_membership_stats(
 ) -> Tuple[Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]]]:
     """Precompute ring membership statistics for atoms and bonds.
 
+    Args:
+        mol (Chem.Mol): RDKit molecule.
+
     Returns:
-        atom_ring_stats: dict[atom_idx] -> {
-            'count': int,
-            'min_size': Optional[int],
-            'max_size': Optional[int],
-            'has_aromatic': bool,
-            'has_non_aromatic': bool,
-        }
-        bond_ring_stats: dict[bond_idx] -> same structure
+        Tuple of (atom_ring_stats, bond_ring_stats). Each is a dict
+        mapping index to ``{'count', 'min_size', 'max_size',
+        'has_aromatic', 'has_non_aromatic'}``.
     """
     ring_info = mol.GetRingInfo()
     atom_rings = ring_info.AtomRings()  # tuple of tuples of atom indices
