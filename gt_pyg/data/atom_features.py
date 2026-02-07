@@ -26,9 +26,9 @@ NEG_IONIZABLE_SMARTS = Chem.MolFromSmarts("[CX3](=O)[O-,OH]")
 # -----------------------------
 RING_COUNT_CATEGORIES = [0, 1, 2, 3, "MoreThanThree"]
 RING_SIZE_CATEGORIES = [3, 4, 5, 6, 7, 8, 9, 10, "MoreThanTen"]
-PERIOD_CATEGORIES = [1, 2, 3, 4, 5, 6, 7, "Unknown"]
+PERIOD_CATEGORIES = [1, 2, 3, 4, 5, 6, 7]
 # 0 is used for "no group / undefined" (e.g. some f-block elements if RDKit returns 0)
-GROUP_CATEGORIES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, "Unknown"]
+GROUP_CATEGORIES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 # Permitted list of atoms for one-hot encoding
 PERMITTED_ATOMS = [
