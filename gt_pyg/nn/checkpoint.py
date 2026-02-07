@@ -84,6 +84,8 @@ def load_checkpoint(
     Returns:
         Checkpoint dict with state_dict, config, etc.
     """
+    # NOTE: weights_only=False is intentional — checkpoints store non-tensor
+    # metadata (config dicts, version strings, etc.).  Only load files you trust.
     checkpoint = torch.load(path, map_location=map_location, weights_only=False)
 
     saved_version = checkpoint.get("gt_pyg_version")
@@ -116,6 +118,7 @@ def get_checkpoint_info(path: Union[str, Path]) -> Dict[str, Any]:
     Returns:
         Dict with version, created_at, config, epoch, etc. (no state_dicts).
     """
+    # NOTE: weights_only=False is intentional — see load_checkpoint above.
     checkpoint = torch.load(path, map_location="cpu", weights_only=False)
     info = {}
     for key in ["checkpoint_version", "gt_pyg_version", "created_at",
