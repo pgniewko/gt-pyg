@@ -28,8 +28,6 @@ from .utils import (
     get_ring_membership_stats,
     get_gnm_encodings,
     get_tensor_data,
-    get_node_dim,
-    get_edge_dim,
 )
 
 __all__ = [
@@ -56,6 +54,4 @@ __all__ = [
     "get_ring_membership_stats",
     "get_gnm_encodings",
     "get_tensor_data",
-    "get_node_dim",
-    "get_edge_dim",
 ]

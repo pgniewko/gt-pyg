@@ -376,8 +376,7 @@ def get_atom_feature_dim(
     Calculates the expected length of the feature vector based on the
     configuration options.  The returned dimension includes the GNM
     (Kirchhoff pseudoinverse diagonal) term appended by
-    :func:`get_tensor_data`, so the value matches
-    :func:`~gt_pyg.data.utils.get_node_dim`.
+    :func:`get_tensor_data`.
 
     Args:
         use_chirality (bool, optional): Whether chirality features are included.

@@ -28,33 +28,10 @@ from .atom_features import (
 )
 from .bond_features import (
     get_bond_features,
-    get_bond_feature_dim,
+    get_edge_dim,
 )
 
 
-__SMILES = "c1ccccc1"
-
-
-def get_node_dim() -> int:
-    """Return the dimensionality of the node feature vector.
-
-    This is equivalent to ``get_atom_feature_dim()`` and is provided
-    as a convenience alias.
-
-    Returns:
-        int: Number of features per node.
-    """
-    return get_atom_feature_dim()
-
-
-def get_edge_dim() -> int:
-    """Return the dimensionality of the edge feature vector.
-
-    Returns:
-        int: Number of features per edge.
-    """
-    data = get_tensor_data([__SMILES], [0])[0]
-    return data.edge_attr.size(-1)
 
 
 def canonicalize_smiles(
