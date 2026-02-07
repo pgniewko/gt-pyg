@@ -83,7 +83,15 @@ def _canonicalize_mol(
                     chg = atom.GetFormalCharge()
                     hcount = atom.GetTotalNumHs()
                     atom.SetFormalCharge(0)
-                    atom.SetNumExplicitHs(hcount - chg)
+                    new_hcount = hcount - chg
+                    if new_hcount < 0:
+                        logging.warning(
+                            "Charge neutralization would set negative H count "
+                            "(%d) on atom %d; clamping to 0",
+                            new_hcount, at_idx,
+                        )
+                        new_hcount = 0
+                    atom.SetNumExplicitHs(new_hcount)
                     atom.UpdatePropertyCache()
 
         return mol
