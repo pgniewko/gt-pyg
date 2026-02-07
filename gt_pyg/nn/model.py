@@ -379,22 +379,23 @@ class GraphTransformerNet(nn.Module):
         self._set_requires_grad(to_unfreeze, requires_grad=True)
         return self
 
-    def get_frozen_status(self) -> Dict[str, bool]:
+    def get_frozen_status(self) -> Dict[str, Optional[bool]]:
         """
         Get freeze status for each component group.
 
         Returns:
-            Dict mapping component name to True if all params are frozen.
+            Dict mapping component name to True if all params are frozen,
+            False if any param is trainable, or None if the component has
+            no learnable parameters.
         """
-        status = {}
+        status: Dict[str, Optional[bool]] = {}
         for name in ["embeddings", "encoder", "gt_layers", "heads", "pooling"]:
             modules = self._get_component_modules(name)
-            all_frozen = all(
-                not p.requires_grad
-                for m in modules
-                for p in m.parameters()
-            )
-            status[name] = all_frozen
+            params = [p for m in modules for p in m.parameters()]
+            if not params:
+                status[name] = None
+            else:
+                status[name] = all(not p.requires_grad for p in params)
         return status
 
 
