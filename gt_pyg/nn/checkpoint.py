@@ -38,7 +38,7 @@ def save_checkpoint(
         best_metric: Best metric value.
         extra: Additional data.
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     path = Path(path)
     if path.suffix != ".pt":
@@ -48,7 +48,7 @@ def save_checkpoint(
     checkpoint = {
         "checkpoint_version": CHECKPOINT_VERSION,
         "gt_pyg_version": __version__,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "model_state_dict": model.state_dict(),
     }
 

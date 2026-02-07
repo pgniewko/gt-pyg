@@ -299,10 +299,13 @@ def get_tensor_data(
 
     for smiles, y_val in tqdm(zip(x_smiles, y), total=len(x_smiles), desc="Processing data"):
         # Parse and canonicalize SMILES
+        raw_smiles = smiles
         smiles = canonicalize_smiles(smiles)
+        if smiles is None:
+            raise ValueError(f"Failed to canonicalize SMILES: {raw_smiles}")
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            raise ValueError(f"RDKit failed to parse SMILES: {smiles}")
+            raise ValueError(f"RDKit failed to parse SMILES: {smiles} (original: {raw_smiles})")
         Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
 
         # Compute Gasteiger partial charges for the entire molecule
