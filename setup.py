@@ -11,6 +11,7 @@ setup(
         "torch>=1.13.0",
         "torch_geometric",
         "numpy",
+        "pandas",
         "rdkit",
         "tqdm",
     ],
