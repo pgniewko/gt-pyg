@@ -28,43 +28,28 @@ from .atom_features import (
 )
 from .bond_features import (
     get_bond_features,
-    get_edge_dim,
 )
 
 
 
 
-def canonicalize_smiles(
+def _canonicalize_mol(
     smiles: str,
     keep_stereo: bool = True,
     keep_charges: bool = True,
     keep_largest_fragment: bool = True,
-) -> Optional[str]:
-    """Canonicalize a SMILES string with optional fragment/stereo/charge handling.
-
-    This function produces a consistent canonical SMILES representation while
-    preserving important chemical information like charges and stereochemistry
-    by default.
+) -> Optional[Chem.Mol]:
+    """Parse and clean a SMILES string, returning the canonicalized Mol object.
 
     Args:
         smiles (str): Input SMILES string.
-        keep_stereo (bool, optional): Preserve stereochemistry (@, @@, /, \\).
+        keep_stereo (bool, optional): Preserve stereochemistry. Defaults to True.
+        keep_charges (bool, optional): Preserve formal charges. Defaults to True.
+        keep_largest_fragment (bool, optional): Keep only the largest fragment.
             Defaults to True.
-        keep_charges (bool, optional): Preserve formal charges ([NH4+], [O-], etc.).
-            Defaults to True.
-        keep_largest_fragment (bool, optional): Keep only the largest fragment
-            by heavy atom count (removes salts/counterions). Defaults to True.
 
     Returns:
-        Optional[str]: Canonical SMILES string, or None if parsing fails.
-
-    Examples:
-        >>> canonicalize_smiles("[NH4+]")  # Preserves charge
-        '[NH4+]'
-        >>> canonicalize_smiles("C[C@H](O)F")  # Preserves stereo
-        'C[C@H](O)F'
-        >>> canonicalize_smiles("CCO.[Na+].[Cl-]")  # Removes salts
-        'CCO'
+        Optional[Chem.Mol]: Canonicalized molecule, or None if parsing fails.
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -102,15 +87,50 @@ def canonicalize_smiles(
                     atom.SetNumExplicitHs(hcount - chg)
                     atom.UpdatePropertyCache()
 
-        # Generate canonical SMILES
-        out_smi = Chem.MolToSmiles(mol, isomericSmiles=keep_stereo, canonical=True)
-        if not out_smi:
-            return None
-        return out_smi
+        return mol
 
     except Exception as e:
         logging.warning(f"Failed to canonicalize SMILES '{smiles}': {e}")
         return None
+
+
+def canonicalize_smiles(
+    smiles: str,
+    keep_stereo: bool = True,
+    keep_charges: bool = True,
+    keep_largest_fragment: bool = True,
+) -> Optional[str]:
+    """Canonicalize a SMILES string with optional fragment/stereo/charge handling.
+
+    This function produces a consistent canonical SMILES representation while
+    preserving important chemical information like charges and stereochemistry
+    by default.
+
+    Args:
+        smiles (str): Input SMILES string.
+        keep_stereo (bool, optional): Preserve stereochemistry (@, @@, /, \\).
+            Defaults to True.
+        keep_charges (bool, optional): Preserve formal charges ([NH4+], [O-], etc.).
+            Defaults to True.
+        keep_largest_fragment (bool, optional): Keep only the largest fragment
+            by heavy atom count (removes salts/counterions). Defaults to True.
+
+    Returns:
+        Optional[str]: Canonical SMILES string, or None if parsing fails.
+
+    Examples:
+        >>> canonicalize_smiles("[NH4+]")  # Preserves charge
+        '[NH4+]'
+        >>> canonicalize_smiles("C[C@H](O)F")  # Preserves stereo
+        'C[C@H](O)F'
+        >>> canonicalize_smiles("CCO.[Na+].[Cl-]")  # Removes salts
+        'CCO'
+    """
+    mol = _canonicalize_mol(smiles, keep_stereo, keep_charges, keep_largest_fragment)
+    if mol is None:
+        return None
+    out_smi = Chem.MolToSmiles(mol, isomericSmiles=keep_stereo, canonical=True)
+    return out_smi or None
 
 
 def get_ring_membership_stats(
@@ -271,14 +291,10 @@ def get_tensor_data(
     data_list: List[Data] = []
 
     for smiles, y_val in tqdm(zip(x_smiles, y), total=len(x_smiles), desc="Processing data"):
-        # Parse and canonicalize SMILES
-        raw_smiles = smiles
-        smiles = canonicalize_smiles(smiles)
-        if smiles is None:
-            raise ValueError(f"Failed to canonicalize SMILES: {raw_smiles}")
-        mol = Chem.MolFromSmiles(smiles)
+        # Parse and canonicalize SMILES (single parse)
+        mol = _canonicalize_mol(smiles)
         if mol is None:
-            raise ValueError(f"RDKit failed to parse SMILES: {smiles} (original: {raw_smiles})")
+            raise ValueError(f"Failed to canonicalize SMILES: {smiles}")
         Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
 
         # Compute Gasteiger partial charges for the entire molecule
