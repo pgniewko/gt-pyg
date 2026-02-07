@@ -27,12 +27,13 @@ setup(
     name="gt_pyg",
     version=_git_version(),
     description="Implementation of the Graph Transformer architecture in Pytorch-geometric",
-    packages=find_packages(exclude=["tests*"]),
+    packages=find_packages(exclude=["tests*", "*.tests", "*.tests.*"]),
     install_requires=[
         "torch>=1.13.0",
         "torch_geometric",
         "numpy",
         "rdkit",
+        "tqdm",
     ],
     extras_require={
         "dev": ["pytest>=7.0"],
