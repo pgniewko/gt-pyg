@@ -217,6 +217,7 @@ def get_atom_features(
     hydrogens_implicit: bool = True,
     atom_ring_stats: Optional[Dict[int, Dict[str, Any]]] = None,
     pharmacophore_flags: Optional[Dict[int, List[int]]] = None,
+    gnm_value: Optional[float] = None,
 ) -> np.ndarray:
     """Compute a 1D array of atom features from an RDKit atom.
 
@@ -236,6 +237,8 @@ def get_atom_features(
         - Pharmacophore flags (5 binary):
             - H-bond donor, H-bond acceptor, hydrophobic,
               positive ionizable, negative ionizable
+        - GNM encoding (1 continuous):
+            - Kirchhoff pseudoinverse diagonal value (0.0 when GNM is disabled)
 
     Args:
         atom (Chem.Atom): RDKit atom.
@@ -245,6 +248,8 @@ def get_atom_features(
         atom_ring_stats (dict, optional): Precomputed ring stats for atoms.
         pharmacophore_flags (dict, optional): Precomputed pharmacophore flags from
             ``get_pharmacophore_flags(mol)``.
+        gnm_value (float, optional): Kirchhoff pseudoinverse diagonal value for
+            this atom.  Defaults to ``0.0`` when ``None``.
 
     Returns:
         np.ndarray: Atom feature vector.
@@ -356,6 +361,9 @@ def get_atom_features(
         flags = [0, 0, 0, 0, 0]
     atom_feature_vector += flags
 
+    # GNM encoding (Kirchhoff pseudoinverse diagonal)
+    atom_feature_vector += [gnm_value if gnm_value is not None else 0.0]
+
     return np.array(atom_feature_vector)
 
 
@@ -366,7 +374,9 @@ def get_atom_feature_dim(
     """Return the dimensionality of the atom feature vector.
 
     Calculates the expected length of the feature vector based on the
-    configuration options.
+    configuration options.  The returned dimension includes the GNM
+    (Kirchhoff pseudoinverse diagonal) term appended by
+    :func:`get_tensor_data`.
 
     Args:
         use_chirality (bool, optional): Whether chirality features are included.

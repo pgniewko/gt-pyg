@@ -28,31 +28,10 @@ from .atom_features import (
 )
 from .bond_features import (
     get_bond_features,
-    get_bond_feature_dim,
+    get_edge_dim,
 )
 
 
-__SMILES = "c1ccccc1"
-
-
-def get_node_dim() -> int:
-    """Return the dimensionality of the node feature vector.
-
-    Returns:
-        int: Number of features per node.
-    """
-    data = get_tensor_data([__SMILES], [0])[0]
-    return data.x.size(-1)
-
-
-def get_edge_dim() -> int:
-    """Return the dimensionality of the edge feature vector.
-
-    Returns:
-        int: Number of features per edge.
-    """
-    data = get_tensor_data([__SMILES], [0])[0]
-    return data.edge_attr.size(-1)
 
 
 def canonicalize_smiles(
@@ -218,8 +197,8 @@ def get_ring_membership_stats(
     return atom_ring_stats, bond_ring_stats
 
 
-def get_gnn_encodings(mol: Chem.Mol) -> np.ndarray:
-    """Compute Gaussian Network Model-style encodings (inverse Kirchhoff).
+def get_gnm_encodings(mol: Chem.Mol) -> np.ndarray:
+    """Compute Gaussian Network Model (GNM) encodings (inverse Kirchhoff).
 
     Constructs the adjacency matrix, degree matrix, Laplacian (Kirchhoff) matrix,
     then returns its pseudoinverse.
@@ -265,7 +244,7 @@ def _to_float_sequence(
 def get_tensor_data(
     x_smiles: List[str],
     y: List[Union[float, int, Sequence[Optional[float]], np.ndarray]],
-    gnn: bool = True,
+    gnm: bool = True,
 ) -> List[Data]:
     """Build torch_geometric molecular graphs with labels and masks.
 
@@ -277,8 +256,9 @@ def get_tensor_data(
         x_smiles (List[str]): SMILES strings.
         y (List[Union[float, int, Sequence[Optional[float]], np.ndarray]]): Per-sample labels:
             single float/int (single-task) or a sequence/array (multi-task).
-        gnn (bool, optional): If True, append GNN-style diagonal terms to node features.
-            Defaults to ``True``.
+        gnm (bool, optional): If True, compute the GNM (Kirchhoff pseudoinverse
+            diagonal) and populate the corresponding node feature.  When False
+            the feature is left at ``0.0``.  Defaults to ``True``.
 
     Returns:
         List[Data]: One ``Data`` per sample with fields:
@@ -311,8 +291,8 @@ def get_tensor_data(
         # Compute pharmacophore flags for entire molecule
         pharmacophore_flags = get_pharmacophore_flags(mol)
 
-        # Optional GNN-style node augmentation
-        dRdR = get_gnn_encodings(mol) if gnn else None
+        # Optional GNM-style node augmentation
+        dRdR = get_gnm_encodings(mol) if gnm else None
 
         # Precompute ring membership stats
         atom_ring_stats, bond_ring_stats = get_ring_membership_stats(mol)
@@ -321,17 +301,15 @@ def get_tensor_data(
         x_feat = []
         for atom in mol.GetAtoms():
             idx = atom.GetIdx()
-            atom_features = get_atom_features(
+            atom_feats = get_atom_features(
                 atom,
                 use_chirality=True,
                 hydrogens_implicit=True,
                 atom_ring_stats=atom_ring_stats,
                 pharmacophore_flags=pharmacophore_flags,
+                gnm_value=dRdR[idx][idx] if dRdR is not None else None,
             )
-            if dRdR is not None:
-                x_feat.append(atom_features.tolist() + [dRdR[idx][idx]])
-            else:
-                x_feat.append(atom_features.tolist())
+            x_feat.append(atom_feats.tolist())
         x = torch.as_tensor(np.asarray(x_feat), dtype=torch.float)
 
         # Edges

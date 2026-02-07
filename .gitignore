@@ -8,3 +8,4 @@ ww-img
 *.tab
 build/
 gt_pyg.egg-info/
+.eggs/
