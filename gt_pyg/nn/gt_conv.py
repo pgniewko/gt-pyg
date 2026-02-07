@@ -52,7 +52,7 @@ class GTConv(MessagePassing):
             aggregators = ["sum"]
 
         # Choose aggregation
-        if len(aggregators) == 1 and aggregators[0] == "sum":
+        if len(aggregators) == 1 and aggregators[0] in ("sum", "add"):
             aggr = "add"
         else:
             aggr = MultiAggregation(aggregators, mode="cat")
