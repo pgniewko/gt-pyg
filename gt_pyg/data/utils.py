@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 # Third-party
 import numpy as np
 import torch
-from numpy.linalg import pinv
 from rdkit import Chem
 from rdkit.Chem import rdPartialCharges
 from rdkit.Chem.rdmolops import GetAdjacencyMatrix
@@ -217,24 +216,25 @@ def get_ring_membership_stats(
     return atom_ring_stats, bond_ring_stats
 
 
-def get_gnm_encodings(mol: Chem.Mol) -> np.ndarray:
-    """Compute Gaussian Network Model (GNM) encodings (inverse Kirchhoff).
+def get_gnm_encodings(adjacency: np.ndarray) -> np.ndarray:
+    """Compute Gaussian Network Model (GNM) diagonal encodings.
 
-    Constructs the adjacency matrix, degree matrix, Laplacian (Kirchhoff) matrix,
-    then returns its pseudoinverse.
+    Builds the Kirchhoff (graph Laplacian) matrix from the adjacency matrix
+    and returns the diagonal of its pseudoinverse via eigendecomposition.
 
     Args:
-        mol (Chem.Mol): Input molecule.
+        adjacency (np.ndarray): Adjacency matrix with shape ``[N, N]``.
 
     Returns:
-        np.ndarray: Pseudoinverse of the Kirchhoff matrix with shape ``[N, N]``.
+        np.ndarray: Diagonal of the Kirchhoff pseudoinverse with shape ``[N]``.
     """
-    adjacency_matrix = GetAdjacencyMatrix(mol)
-    adjacency_np = np.array(adjacency_matrix)
-    degree_matrix = np.diag(np.sum(adjacency_np, axis=1))
-    kirchhoff_matrix = degree_matrix - adjacency_np
-    inv_kirchhoff_matrix = pinv(kirchhoff_matrix)
-    return inv_kirchhoff_matrix
+    degree = np.diag(adjacency.sum(axis=1))
+    kirchhoff = degree - adjacency
+    eigenvalues, eigenvectors = np.linalg.eigh(kirchhoff)
+    # Invert non-zero eigenvalues (skip the near-zero translational mode)
+    inv_eigenvalues = np.where(np.abs(eigenvalues) > 1e-10, 1.0 / eigenvalues, 0.0)
+    # Diagonal of Q @ diag(inv_eigenvalues) @ Q^T = sum of Q_ij^2 * inv_eigenvalues_j
+    return (eigenvectors ** 2) @ inv_eigenvalues
 
 
 def _to_float_sequence(
@@ -307,8 +307,11 @@ def get_tensor_data(
         # Compute pharmacophore flags for entire molecule
         pharmacophore_flags = get_pharmacophore_flags(mol)
 
+        # Compute adjacency matrix once (used by GNM and edge_index)
+        adjacency = np.array(GetAdjacencyMatrix(mol))
+
         # Optional GNM-style node augmentation
-        dRdR = get_gnm_encodings(mol) if gnm else None
+        gnm_diag = get_gnm_encodings(adjacency) if gnm else None
 
         # Precompute ring membership stats
         atom_ring_stats, bond_ring_stats = get_ring_membership_stats(mol)
@@ -323,13 +326,13 @@ def get_tensor_data(
                 hydrogens_implicit=True,
                 atom_ring_stats=atom_ring_stats,
                 pharmacophore_flags=pharmacophore_flags,
-                gnm_value=dRdR[idx][idx] if dRdR is not None else None,
+                gnm_value=gnm_diag[idx] if gnm_diag is not None else None,
             )
             x_feat.append(atom_feats.tolist())
         x = torch.as_tensor(np.asarray(x_feat), dtype=torch.float)
 
         # Edges
-        rows, cols = np.nonzero(GetAdjacencyMatrix(mol))
+        rows, cols = np.nonzero(adjacency)
         torch_rows = torch.from_numpy(rows.astype(np.int64)).to(torch.long)
         torch_cols = torch.from_numpy(cols.astype(np.int64)).to(torch.long)
         edge_index = torch.stack([torch_rows, torch_cols], dim=0)
