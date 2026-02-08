@@ -13,16 +13,7 @@ from tqdm.auto import tqdm
 
 # Local imports from refactored modules
 from .atom_features import (
-    PERIODIC_TABLE,
-    RING_COUNT_CATEGORIES,
-    RING_SIZE_CATEGORIES,
-    PERIOD_CATEGORIES,
-    GROUP_CATEGORIES,
-    PERMITTED_ATOMS,
-    get_period,
-    get_group,
     get_atom_features,
-    get_atom_feature_dim,
     get_pharmacophore_flags,
 )
 from .bond_features import (

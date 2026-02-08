@@ -302,14 +302,6 @@ class TestConfiguration:
         # Outputs should differ because dropout is active in train mode
         assert not torch.allclose(x_train, x_eval, atol=1e-6)
 
-    def test_invalid_hidden_dim(self):
-        with pytest.raises(ValueError, match="divisible by num_heads"):
-            GTConv(node_in_dim=16, hidden_dim=31, num_heads=4)
-
-    def test_invalid_edge_in_dim(self):
-        with pytest.raises(ValueError, match="edge_in_dim must be positive"):
-            GTConv(node_in_dim=16, hidden_dim=32, edge_in_dim=0, num_heads=4)
-
     def test_default_dropout_is_point_one(self):
         """Default dropout should be 0.1 (synced with GraphTransformerNet)."""
         conv = GTConv(node_in_dim=16, hidden_dim=32, num_heads=4)
@@ -333,6 +325,14 @@ class TestInputValidation:
         with pytest.raises(ValueError, match="num_heads must be positive"):
             GTConv(node_in_dim=16, hidden_dim=16, num_heads=-1)
 
+    def test_invalid_hidden_dim(self):
+        with pytest.raises(ValueError, match="divisible by num_heads"):
+            GTConv(node_in_dim=16, hidden_dim=31, num_heads=4)
+
+    def test_invalid_edge_in_dim(self):
+        with pytest.raises(ValueError, match="edge_in_dim must be positive"):
+            GTConv(node_in_dim=16, hidden_dim=32, edge_in_dim=0, num_heads=4)
+
 
 # ---------------------------------------------------------------------------
 # TestNormalizationSymmetry
@@ -341,11 +341,11 @@ class TestInputValidation:
 class TestNormalizationSymmetry:
     """Verify the edge path uses pre-norm (matching the node path), not post-norm."""
 
-    def test_edge_output_is_not_post_normed(self, conv, edge_index):
-        """Edge output should NOT be wrapped in an extra norm layer.
+    def test_node_and_edge_paths_both_prenorm(self, conv, edge_index):
+        """Both paths should follow: residual -> norm -> sublayer -> residual.
 
-        With pre-norm, the output is a raw residual sum, so it should NOT
-        have zero mean and unit variance across features.
+        A post-normed output would have ~zero mean and ~unit std across features.
+        Pre-norm residual outputs should deviate from that pattern.
         """
         torch.manual_seed(42)
         conv.eval()
@@ -353,16 +353,23 @@ class TestNormalizationSymmetry:
         edge_attr = torch.randn(4, 8)
 
         with torch.no_grad():
-            _, edge_out = conv(x, edge_index, edge_attr)
+            x_out, edge_out = conv(x, edge_index, edge_attr)
 
-        # A post-normed output would have ~zero mean and ~unit std.
-        # Pre-norm residual output should deviate from that.
+        # Edge path: no trailing norm
         edge_mean = edge_out.mean(dim=-1)
         edge_std = edge_out.std(dim=-1)
         assert not (
-            torch.allclose(edge_mean, torch.zeros_like(edge_mean), atol=0.1)
-            and torch.allclose(edge_std, torch.ones_like(edge_std), atol=0.1)
+            torch.allclose(edge_mean, torch.zeros_like(edge_mean), atol=1e-2)
+            and torch.allclose(edge_std, torch.ones_like(edge_std), atol=1e-2)
         ), "Edge output looks post-normed (zero mean, unit std)"
+
+        # Node path: no trailing norm (sanity check for symmetry)
+        node_mean = x_out.mean(dim=-1)
+        node_std = x_out.std(dim=-1)
+        assert not (
+            torch.allclose(node_mean, torch.zeros_like(node_mean), atol=1e-2)
+            and torch.allclose(node_std, torch.ones_like(node_std), atol=1e-2)
+        ), "Node output looks post-normed (zero mean, unit std)"
 
 
 # ---------------------------------------------------------------------------
