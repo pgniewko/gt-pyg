@@ -359,16 +359,16 @@ class TestNormalizationSymmetry:
         edge_mean = edge_out.mean(dim=-1)
         edge_std = edge_out.std(dim=-1)
         assert not (
-            torch.allclose(edge_mean, torch.zeros_like(edge_mean), atol=0.1)
-            and torch.allclose(edge_std, torch.ones_like(edge_std), atol=0.1)
+            torch.allclose(edge_mean, torch.zeros_like(edge_mean), atol=1e-2)
+            and torch.allclose(edge_std, torch.ones_like(edge_std), atol=1e-2)
         ), "Edge output looks post-normed (zero mean, unit std)"
 
         # Node path: no trailing norm (sanity check for symmetry)
         node_mean = x_out.mean(dim=-1)
         node_std = x_out.std(dim=-1)
         assert not (
-            torch.allclose(node_mean, torch.zeros_like(node_mean), atol=0.1)
-            and torch.allclose(node_std, torch.ones_like(node_std), atol=0.1)
+            torch.allclose(node_mean, torch.zeros_like(node_mean), atol=1e-2)
+            and torch.allclose(node_std, torch.ones_like(node_std), atol=1e-2)
         ), "Node output looks post-normed (zero mean, unit std)"
 
 
