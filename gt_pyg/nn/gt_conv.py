@@ -59,6 +59,8 @@ class GTConv(MessagePassing):
 
         super().__init__(node_dim=0, aggr=aggr)
 
+        if num_heads <= 0:
+            raise ValueError(f"num_heads must be positive, got {num_heads}")
         if hidden_dim % num_heads != 0:
             raise ValueError(
                 f"hidden_dim ({hidden_dim}) must be divisible by num_heads ({num_heads})"
@@ -108,13 +110,11 @@ class GTConv(MessagePassing):
                 act=act,
             )
 
-            # Edge norms
+            # Edge norm (pre-FFN, matching node path)
             if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
                 self.norm1e = nn.BatchNorm1d(edge_in_dim)
-                self.norm2e = nn.BatchNorm1d(edge_in_dim)
             elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
                 self.norm1e = nn.LayerNorm(edge_in_dim)
-                self.norm2e = nn.LayerNorm(edge_in_dim)
             else:
                 raise ValueError(f"Unknown norm type: {norm}")
         else:
@@ -124,7 +124,6 @@ class GTConv(MessagePassing):
             self.WOe = self.register_parameter("WOe", None)
             self.ffn_e = self.register_parameter("ffn_e", None)
             self.norm1e = self.register_parameter("norm1e", None)
-            self.norm2e = self.register_parameter("norm2e", None)
 
         # Node norms (pre-attention and pre-FFN)
         if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
@@ -239,14 +238,6 @@ class GTConv(MessagePassing):
                 nn.init.ones_(self.norm1e.weight)
                 nn.init.zeros_(self.norm1e.bias)
 
-            if isinstance(self.norm2e, nn.BatchNorm1d):
-                self.norm2e.reset_running_stats()
-                nn.init.ones_(self.norm2e.weight)
-                nn.init.zeros_(self.norm2e.bias)
-            elif isinstance(self.norm2e, nn.LayerNorm):
-                nn.init.ones_(self.norm2e.weight)
-                nn.init.zeros_(self.norm2e.bias)
-
         # FFNs
         if hasattr(self.ffn, "reset_parameters"):
             self.ffn.reset_parameters()
@@ -324,11 +315,10 @@ class GTConv(MessagePassing):
             e_attn = self.dropout_layer(e_attn)
 
             e1 = edge_res + e_attn  # residual
-            e1_norm = self.norm1e(e1)
+            e1_norm = self.norm1e(e1)  # pre-norm before FFN
             e_ffn = self.ffn_e(e1_norm)
             e_ffn = self.dropout_layer(e_ffn)
-            e2 = e1 + e_ffn
-            edge_out = self.norm2e(e2)
+            edge_out = e1 + e_ffn  # residual, no trailing norm (matches node path)
 
         return x_out, edge_out
 

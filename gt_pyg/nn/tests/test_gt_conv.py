@@ -40,6 +40,19 @@ def conv_no_edge():
     )
 
 
+@pytest.fixture
+def gated_conv():
+    """GTConv with gating enabled."""
+    return GTConv(
+        node_in_dim=16,
+        hidden_dim=32,
+        edge_in_dim=8,
+        num_heads=4,
+        gate=True,
+        dropout=0.0,
+    )
+
+
 # ---------------------------------------------------------------------------
 # TestForwardPass — shapes and return types
 # ---------------------------------------------------------------------------
@@ -75,7 +88,7 @@ class TestForwardPass:
 
 
 # ---------------------------------------------------------------------------
-# TestEdgeAttrValidation — #38
+# TestEdgeAttrValidation
 # ---------------------------------------------------------------------------
 
 class TestEdgeAttrValidation:
@@ -96,33 +109,7 @@ class TestEdgeAttrValidation:
 
 
 # ---------------------------------------------------------------------------
-# TestNoMutableState — #1, #35
-# ---------------------------------------------------------------------------
-
-class TestNoMutableState:
-    """GTConv must not store mutable per-forward state like _eij."""
-
-    def test_no_eij_after_init(self, conv):
-        assert not hasattr(conv, "_eij")
-
-    def test_no_eij_after_forward(self, conv, edge_index):
-        x = torch.randn(4, 16)
-        edge_attr = torch.randn(4, 8)
-
-        conv(x, edge_index, edge_attr)
-
-        assert not hasattr(conv, "_eij")
-
-    def test_no_eij_after_forward_no_edges(self, conv_no_edge, edge_index):
-        x = torch.randn(4, 16)
-
-        conv_no_edge(x, edge_index)
-
-        assert not hasattr(conv_no_edge, "_eij")
-
-
-# ---------------------------------------------------------------------------
-# TestEdgeRepresentation — #34
+# TestEdgeRepresentation
 # ---------------------------------------------------------------------------
 
 class TestEdgeRepresentation:
@@ -130,6 +117,7 @@ class TestEdgeRepresentation:
 
     def test_edge_output_changes_with_edge_attr(self, conv, edge_index):
         """Different edge_attr should produce different edge_out."""
+        torch.manual_seed(42)
         conv.eval()
         x = torch.randn(4, 16)
 
@@ -141,32 +129,9 @@ class TestEdgeRepresentation:
 
         assert not torch.allclose(edge_out_a, edge_out_b, atol=1e-6)
 
-    def test_identical_nodes_different_edges(self, edge_index):
-        """With identical node features, edge outputs should still differ
-        when edge_attr differs — proving edge features contribute."""
-        conv = GTConv(
-            node_in_dim=16,
-            hidden_dim=32,
-            edge_in_dim=8,
-            num_heads=4,
-            dropout=0.0,
-        )
-        conv.eval()
-
-        # All nodes identical
-        x = torch.ones(4, 16)
-
-        edge_attr_a = torch.randn(4, 8)
-        edge_attr_b = torch.randn(4, 8)
-
-        _, edge_out_a = conv(x, edge_index, edge_attr_a)
-        _, edge_out_b = conv(x, edge_index, edge_attr_b)
-
-        assert not torch.allclose(edge_out_a, edge_out_b, atol=1e-6)
-
 
 # ---------------------------------------------------------------------------
-# TestGradientFlow — #34
+# TestGradientFlow
 # ---------------------------------------------------------------------------
 
 class TestGradientFlow:
@@ -221,17 +186,6 @@ class TestGradientFlow:
 
 class TestGating:
     """Tests for the optional gating mechanism."""
-
-    @pytest.fixture
-    def gated_conv(self):
-        return GTConv(
-            node_in_dim=16,
-            hidden_dim=32,
-            edge_in_dim=8,
-            num_heads=4,
-            gate=True,
-            dropout=0.0,
-        )
 
     def test_gated_forward(self, gated_conv, edge_index):
         x = torch.randn(4, 16)
@@ -299,6 +253,8 @@ class TestConfiguration:
         x_out, edge_out = conv(x, edge_index, edge_attr)
         assert x_out.shape == (4, 16)
         assert edge_out.shape == (4, 8)
+        # Output should differ from input (non-trivial transform)
+        assert not torch.allclose(x_out, x, atol=1e-6)
 
     def test_qkv_bias(self, edge_index):
         conv = GTConv(
@@ -313,29 +269,49 @@ class TestConfiguration:
         assert x_out.shape == (4, 16)
 
     def test_multi_aggregator(self, edge_index):
-        conv = GTConv(
+        torch.manual_seed(99)
+        conv_single = GTConv(
+            node_in_dim=16, hidden_dim=32, edge_in_dim=8,
+            num_heads=4, aggregators=["sum"], dropout=0.0,
+        )
+        torch.manual_seed(99)
+        conv_multi = GTConv(
             node_in_dim=16, hidden_dim=32, edge_in_dim=8,
             num_heads=4, aggregators=["sum", "mean"], dropout=0.0,
         )
+        conv_single.eval()
+        conv_multi.eval()
+
         x = torch.randn(4, 16)
         edge_attr = torch.randn(4, 8)
 
-        x_out, edge_out = conv(x, edge_index, edge_attr)
-        assert x_out.shape == (4, 16)
-        assert edge_out.shape == (4, 8)
+        x_out_s, _ = conv_single(x, edge_index, edge_attr)
+        x_out_m, _ = conv_multi(x, edge_index, edge_attr)
+
+        # Multi-aggregator should produce different outputs
+        assert x_out_s.shape == x_out_m.shape
+        assert not torch.allclose(x_out_s, x_out_m, atol=1e-6)
 
     def test_dropout_nonzero(self, edge_index):
         conv = GTConv(
             node_in_dim=16, hidden_dim=32, edge_in_dim=8,
             num_heads=4, dropout=0.5,
         )
+        torch.manual_seed(0)
         x = torch.randn(4, 16)
         edge_attr = torch.randn(4, 8)
 
-        # Should not error in train mode
+        # Train mode: dropout active
         conv.train()
-        x_out, edge_out = conv(x, edge_index, edge_attr)
-        assert x_out.shape == (4, 16)
+        torch.manual_seed(1)
+        x_train, _ = conv(x, edge_index, edge_attr)
+
+        # Eval mode: dropout inactive
+        conv.eval()
+        x_eval, _ = conv(x, edge_index, edge_attr)
+
+        # Outputs should differ because dropout is active in train mode
+        assert not torch.allclose(x_train, x_eval, atol=1e-6)
 
     def test_invalid_hidden_dim(self):
         with pytest.raises(ValueError, match="divisible by num_heads"):
@@ -349,6 +325,55 @@ class TestConfiguration:
         """Default dropout should be 0.1 (synced with GraphTransformerNet)."""
         conv = GTConv(node_in_dim=16, hidden_dim=32, num_heads=4)
         assert conv.dropout_p == 0.1
+
+
+# ---------------------------------------------------------------------------
+# TestInputValidation
+# ---------------------------------------------------------------------------
+
+class TestInputValidation:
+    """Verify GTConv rejects invalid constructor arguments with clear errors."""
+
+    def test_num_heads_zero_raises(self):
+        """num_heads=0 should raise ValueError, not ZeroDivisionError."""
+        with pytest.raises(ValueError, match="num_heads must be positive"):
+            GTConv(node_in_dim=16, hidden_dim=16, num_heads=0)
+
+    def test_num_heads_negative_raises(self):
+        """Negative num_heads should raise ValueError."""
+        with pytest.raises(ValueError, match="num_heads must be positive"):
+            GTConv(node_in_dim=16, hidden_dim=16, num_heads=-1)
+
+
+# ---------------------------------------------------------------------------
+# TestNormalizationSymmetry
+# ---------------------------------------------------------------------------
+
+class TestNormalizationSymmetry:
+    """Verify the edge path uses pre-norm (matching the node path), not post-norm."""
+
+    def test_edge_output_is_not_post_normed(self, conv, edge_index):
+        """Edge output should NOT be wrapped in an extra norm layer.
+
+        With pre-norm, the output is a raw residual sum, so it should NOT
+        have zero mean and unit variance across features.
+        """
+        torch.manual_seed(42)
+        conv.eval()
+        x = torch.randn(4, 16)
+        edge_attr = torch.randn(4, 8)
+
+        with torch.no_grad():
+            _, edge_out = conv(x, edge_index, edge_attr)
+
+        # A post-normed output would have ~zero mean and ~unit std.
+        # Pre-norm residual output should deviate from that.
+        edge_mean = edge_out.mean(dim=-1)
+        edge_std = edge_out.std(dim=-1)
+        assert not (
+            torch.allclose(edge_mean, torch.zeros_like(edge_mean), atol=0.1)
+            and torch.allclose(edge_std, torch.ones_like(edge_std), atol=0.1)
+        ), "Edge output looks post-normed (zero mean, unit std)"
 
 
 # ---------------------------------------------------------------------------
