@@ -109,6 +109,9 @@ class GTConv(MessagePassing):
             )
 
             # Edge norms
+            # NOTE: norm2e is registered but no longer called in forward().
+            # It is kept so that checkpoints saved before the pre-norm fix
+            # can still be loaded without missing-key errors.
             if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
                 self.norm1e = nn.BatchNorm1d(edge_in_dim)
                 self.norm2e = nn.BatchNorm1d(edge_in_dim)
@@ -310,11 +313,10 @@ class GTConv(MessagePassing):
             e_attn = self.dropout_layer(e_attn)
 
             e1 = edge_res + e_attn  # residual
-            e1_norm = self.norm1e(e1)
+            e1_norm = self.norm1e(e1)  # pre-norm before FFN
             e_ffn = self.ffn_e(e1_norm)
             e_ffn = self.dropout_layer(e_ffn)
-            e2 = e1 + e_ffn
-            edge_out = self.norm2e(e2)
+            edge_out = e1 + e_ffn  # residual, no trailing norm (matches node path)
 
         # Clear buffer
         self._eij = None
