@@ -3,7 +3,8 @@ import os
 
 _version_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gt_pyg", "_version.py")
 _ns = {"__file__": _version_path}
-exec(open(_version_path).read(), _ns)
+with open(_version_path) as _f:
+    exec(_f.read(), _ns)
 
 setup(
     name="gt_pyg",
@@ -14,7 +15,6 @@ setup(
         "torch>=1.13.0",
         "torch_geometric",
         "numpy",
-        "pandas",
         "rdkit",
         "tqdm",
     ],

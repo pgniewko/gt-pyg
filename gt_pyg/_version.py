@@ -1,6 +1,7 @@
 """Derive a PEP 440 version string from Git metadata."""
 
 import os
+import re
 import subprocess
 
 
@@ -25,8 +26,13 @@ def _get_version() -> str:
             raise RuntimeError(result.stderr)
 
         # git describe --tags --long  →  v1.2.3-N-ghash
+        # Use regex to anchor on the -N-gHASH suffix so that tags with
+        # hyphens (e.g. v1.0.0-rc1) are parsed correctly.
         desc = result.stdout.strip().lstrip("v")
-        version, distance, sha = desc.rsplit("-", 2)
+        m = re.match(r"^(.+)-(\d+)-g([0-9a-f]+)$", desc)
+        if not m:
+            raise RuntimeError(f"Cannot parse git describe output: {desc!r}")
+        version, distance, sha = m.group(1), m.group(2), m.group(3)
 
         if int(distance) == 0:
             return version
