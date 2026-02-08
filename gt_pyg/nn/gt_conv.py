@@ -23,7 +23,7 @@ class GTConv(MessagePassing):
         num_heads: int = 8,
         gate: bool = False,
         qkv_bias: bool = False,
-        dropout: float = 0.0,
+        dropout: float = 0.1,
         norm: str = "ln",        # changed default to LN for transformer-like behavior
         act: str = "gelu",       # changed default to GELU
         aggregators: Optional[List[str]] = None,
@@ -43,7 +43,7 @@ class GTConv(MessagePassing):
             num_heads (int, optional): Number of attention heads. Default is 8.
             gate (bool, optional): Use a gate attention mechanism. Default is False.
             qkv_bias (bool, optional): Bias in the attention projections. Default is False.
-            dropout (float, optional): Dropout probability. Default is 0.0.
+            dropout (float, optional): Dropout probability. Default is 0.1.
             norm (str, optional): "bn" or "ln" (BatchNorm/LayerNorm). Default is "ln".
             act (str, optional): Activation function name for FFNs. Default is "gelu".
             aggregators (List[str], optional): MultiAggregation methods. Default ["sum"].
@@ -164,9 +164,6 @@ class GTConv(MessagePassing):
             act=act,
         )
 
-        # Buffer to hold edge representations from message() for edge update
-        self._eij = None
-
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -267,6 +264,12 @@ class GTConv(MessagePassing):
             updated_x: [N, node_in_dim]
             updated_edge_attr (or None): [E, edge_in_dim]
         """
+        if self.edge_in_dim is not None and edge_attr is None:
+            raise ValueError(
+                "edge_in_dim was set in __init__, but 'edge_attr' is None in forward(). "
+                "Pass edge features or set edge_in_dim=None."
+            )
+
         x_res = x
         edge_res = edge_attr
 
@@ -282,9 +285,16 @@ class GTConv(MessagePassing):
         else:
             G = None
 
+        # Pre-compute edge value projection for use in message() and edge update
+        if self.edge_in_dim is not None and edge_attr is not None:
+            E_val = self.WE_value(edge_attr).view(-1, self.num_heads, self.head_dim)
+        else:
+            E_val = None
+
         # Message passing / attention aggregation
         out = self.propagate(
-            edge_index, Q=Q, K=K, V=V, G=G, edge_attr=edge_attr, size=None
+            edge_index, Q=Q, K=K, V=V, G=G, edge_attr=edge_attr,
+            E_val=E_val, size=None,
         )
         out = out.view(-1, self.hidden_dim * self.num_aggrs)  # [N, hidden_dim * num_aggrs]
 
@@ -300,13 +310,19 @@ class GTConv(MessagePassing):
         x_out = x1 + ffn_out  # final node output
 
         # ---- Edge updates (if present) ----
-        if self.edge_in_dim is None or edge_attr is None or self._eij is None:
+        if self.edge_in_dim is None or edge_attr is None:
             edge_out = edge_attr
         else:
-            # _eij has shape [E, H, Dh]; we use it as edge context
-            e_context = self._eij.view(-1, self.hidden_dim)  # [E, hidden_dim]
+            # Compute edge representation: (Q_dst * K_src / sqrt(d_h)) * E_val
+            # Matches Dwivedi & Bresson (2021) and Chen et al. (2023):
+            #   e_out = (Q·K / sqrt(d_k)) * proj_e
+            # In source_to_target flow: Q_i=target=edge_index[1], K_j=source=edge_index[0]
+            src, dst = edge_index[0], edge_index[1]
+            eij = (Q[dst] * K[src]) / math.sqrt(self.head_dim)  # [E, H, Dh]
+            eij = eij * E_val                                     # [E, H, Dh]
 
-            e_attn = self.WOe(e_context)  # [E, edge_in_dim]
+            e_context = eij.view(-1, self.hidden_dim)  # [E, hidden_dim]
+            e_attn = self.WOe(e_context)               # [E, edge_in_dim]
             e_attn = self.dropout_layer(e_attn)
 
             e1 = edge_res + e_attn  # residual
@@ -316,12 +332,9 @@ class GTConv(MessagePassing):
             e2 = e1 + e_ffn
             edge_out = self.norm2e(e2)
 
-        # Clear buffer
-        self._eij = None
-
         return x_out, edge_out
 
-    def message(self, Q_i, K_j, V_j, G_j, index, edge_attr=None):
+    def message(self, Q_i, K_j, V_j, G_j, index, edge_attr=None, E_val=None):
         """
         Compute messages on edges.
 
@@ -330,6 +343,7 @@ class GTConv(MessagePassing):
         V_j: [E, H, Dh]
         G_j: [E, H, Dh] or None
         edge_attr: [E, edge_in_dim] or None
+        E_val: [E, H, Dh] or None — pre-computed edge value projection
 
         Returns:
             Tensor: Attention-weighted values [E, H, Dh].
@@ -343,15 +357,11 @@ class GTConv(MessagePassing):
         if self.edge_in_dim is not None and edge_attr is not None:
             # Additive bias to attention logits (per head)
             E_bias = self.WE_logits(edge_attr)  # [E, H]
-            # Edge contribution to values
-            E_val = self.WE_value(edge_attr).view(-1, self.num_heads, Dh)
-            V_j = V_j + E_val
-
-            # Optionally store an edge representation based on Q,K,E etc.
-            self._eij = logits_vec
+            # Edge contribution to values (pre-computed in forward())
+            if E_val is not None:
+                V_j = V_j + E_val
         else:
             E_bias = 0.0
-            self._eij = logits_vec
 
         # Gating on values (nodes)
         if self.gate and G_j is not None:
