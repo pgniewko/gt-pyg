@@ -314,11 +314,9 @@ class GTConv(MessagePassing):
             edge_out = edge_attr
         else:
             # Compute edge representation: (Q_dst * K_src / sqrt(d_h)) * E_val
-            # Matches Dwivedi & Bresson (2021) and Chen et al. (2023):
-            #   e_out = (Q·K / sqrt(d_k)) * proj_e
             # In source_to_target flow: Q_i=target=edge_index[1], K_j=source=edge_index[0]
             src, dst = edge_index[0], edge_index[1]
-            eij = (Q[dst] * K[src]) / math.sqrt(self.head_dim)  # [E, H, Dh]
+            eij = (Q[dst] * K[src]) / math.sqrt(self.head_dim)    # [E, H, Dh]
             eij = eij * E_val                                     # [E, H, Dh]
 
             e_context = eij.view(-1, self.hidden_dim)  # [E, hidden_dim]
@@ -343,7 +341,7 @@ class GTConv(MessagePassing):
         V_j: [E, H, Dh]
         G_j: [E, H, Dh] or None
         edge_attr: [E, edge_in_dim] or None
-        E_val: [E, H, Dh] or None — pre-computed edge value projection
+        E_val: [E, H, Dh] or None
 
         Returns:
             Tensor: Attention-weighted values [E, H, Dh].
