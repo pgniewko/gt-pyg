@@ -282,10 +282,16 @@ def get_tensor_data(
             - ``x`` (torch.FloatTensor): Node features ``[N, F]``.
             - ``edge_index`` (torch.LongTensor): COO edges ``[2, E]``.
             - ``edge_attr`` (torch.FloatTensor): Edge features ``[E, D]``.
-            - ``y`` (torch.FloatTensor): Task targets ``[T]``.
-            - ``y_mask`` (torch.FloatTensor): Mask ``[T]`` (1=present, 0=missing).
+            - ``y`` (torch.FloatTensor): Task targets ``[1, T]``.
+            - ``y_mask`` (torch.FloatTensor): Mask ``[1, T]`` (1=present, 0=missing).
     """
     data_list: List[Data] = []
+
+    if len(x_smiles) != len(y):
+        raise ValueError(
+            f"x_smiles and y must have the same length, "
+            f"got {len(x_smiles)} and {len(y)}"
+        )
 
     for smiles, y_val in tqdm(zip(x_smiles, y), total=len(x_smiles), desc="Processing data"):
         # Parse and canonicalize SMILES (single parse)
@@ -347,18 +353,19 @@ def get_tensor_data(
         edge_attr = torch.as_tensor(np.asarray(edge_attr_feat), dtype=torch.float)
 
         # Labels (multi-task friendly)
+        # Shape [1, T] so PyG batching stacks to [B, T], matching model output.
         y_arr = _to_float_sequence(y_val)  # [T]
         y_mask_arr = np.isfinite(y_arr).astype(np.float32)
-        y_tensor = torch.as_tensor(y_arr, dtype=torch.float)
-        y_mask_tensor = torch.as_tensor(y_mask_arr, dtype=torch.float)
+        y_tensor = torch.as_tensor(y_arr, dtype=torch.float).unsqueeze(0)       # [1, T]
+        y_mask_tensor = torch.as_tensor(y_mask_arr, dtype=torch.float).unsqueeze(0)  # [1, T]
 
         data_list.append(
             Data(
                 x=x,
                 edge_index=edge_index,
                 edge_attr=edge_attr,
-                y=y_tensor,          # [num_tasks]
-                y_mask=y_mask_tensor # [num_tasks]
+                y=y_tensor,          # [1, num_tasks]
+                y_mask=y_mask_tensor  # [1, num_tasks]
             )
         )
 
