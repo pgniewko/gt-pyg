@@ -13,7 +13,7 @@ class MLP(nn.Module):
         hidden_dims: Union[int, List[int]],
         num_hidden_layers: int = 1,
         dropout: float = 0.0,
-        act: str = "relu",
+        act: str = "gelu",
         act_kwargs: Optional[Dict[str, Any]] = None,
     ):
         """
@@ -27,7 +27,7 @@ class MLP(nn.Module):
             num_hidden_layers (int, optional): Number of hidden layers. Default is 1.
                 If 0, the MLP degenerates to a single Linear(input_dim, output_dim).
             dropout (float, optional): Dropout probability. Default is 0.0.
-            act (str, optional): Activation function name. Default is "relu".
+            act (str, optional): Activation function name. Default is "gelu".
             act_kwargs (Dict[str, Any], optional): Additional arguments for the
                 activation function. Default is None.
         """

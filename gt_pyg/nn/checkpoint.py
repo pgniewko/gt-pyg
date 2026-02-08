@@ -123,7 +123,13 @@ def get_checkpoint_info(path: Union[str, Path]) -> Dict[str, Any]:
     info = {}
     for key in ["checkpoint_version", "gt_pyg_version", "created_at",
                 "model_config", "epoch", "global_step", "best_metric",
-                "frozen_status", "extra"]:
+                "extra"]:
         if key in checkpoint:
             info[key] = checkpoint[key]
+
+    # frozen_status is stored inside extra by GraphTransformerNet.save_checkpoint
+    extra = checkpoint.get("extra")
+    if isinstance(extra, dict) and "frozen_status" in extra:
+        info["frozen_status"] = extra["frozen_status"]
+
     return info

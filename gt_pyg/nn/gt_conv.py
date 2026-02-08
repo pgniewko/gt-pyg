@@ -5,7 +5,6 @@ from typing import List, Optional
 # Third party
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 from torch_geometric.nn.aggr import MultiAggregation
@@ -23,7 +22,7 @@ class GTConv(MessagePassing):
         num_heads: int = 8,
         gate: bool = False,
         qkv_bias: bool = False,
-        dropout: float = 0.0,
+        dropout: float = 0.1,
         norm: str = "ln",        # changed default to LN for transformer-like behavior
         act: str = "gelu",       # changed default to GELU
         aggregators: Optional[List[str]] = None,
@@ -43,7 +42,7 @@ class GTConv(MessagePassing):
             num_heads (int, optional): Number of attention heads. Default is 8.
             gate (bool, optional): Use a gate attention mechanism. Default is False.
             qkv_bias (bool, optional): Bias in the attention projections. Default is False.
-            dropout (float, optional): Dropout probability. Default is 0.0.
+            dropout (float, optional): Dropout probability. Default is 0.1.
             norm (str, optional): "bn" or "ln" (BatchNorm/LayerNorm). Default is "ln".
             act (str, optional): Activation function name for FFNs. Default is "gelu".
             aggregators (List[str], optional): MultiAggregation methods. Default ["sum"].
@@ -110,16 +109,11 @@ class GTConv(MessagePassing):
                 act=act,
             )
 
-            # Edge norms
-            # NOTE: norm2e is registered but no longer called in forward().
-            # It is kept so that checkpoints saved before the pre-norm fix
-            # can still be loaded without missing-key errors.
+            # Edge norm (pre-FFN, matching node path)
             if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
                 self.norm1e = nn.BatchNorm1d(edge_in_dim)
-                self.norm2e = nn.BatchNorm1d(edge_in_dim)
             elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
                 self.norm1e = nn.LayerNorm(edge_in_dim)
-                self.norm2e = nn.LayerNorm(edge_in_dim)
             else:
                 raise ValueError(f"Unknown norm type: {norm}")
         else:
@@ -129,7 +123,6 @@ class GTConv(MessagePassing):
             self.WOe = self.register_parameter("WOe", None)
             self.ffn_e = self.register_parameter("ffn_e", None)
             self.norm1e = self.register_parameter("norm1e", None)
-            self.norm2e = self.register_parameter("norm2e", None)
 
         # Node norms (pre-attention and pre-FFN)
         if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
@@ -168,9 +161,6 @@ class GTConv(MessagePassing):
             dropout=dropout,
             act=act,
         )
-
-        # Buffer to hold edge representations from message() for edge update
-        self._eij = None
 
         self.reset_parameters()
 
@@ -247,14 +237,6 @@ class GTConv(MessagePassing):
                 nn.init.ones_(self.norm1e.weight)
                 nn.init.zeros_(self.norm1e.bias)
 
-            if isinstance(self.norm2e, nn.BatchNorm1d):
-                self.norm2e.reset_running_stats()
-                nn.init.ones_(self.norm2e.weight)
-                nn.init.zeros_(self.norm2e.bias)
-            elif isinstance(self.norm2e, nn.LayerNorm):
-                nn.init.ones_(self.norm2e.weight)
-                nn.init.zeros_(self.norm2e.bias)
-
         # FFNs
         if hasattr(self.ffn, "reset_parameters"):
             self.ffn.reset_parameters()
@@ -272,6 +254,12 @@ class GTConv(MessagePassing):
             updated_x: [N, node_in_dim]
             updated_edge_attr (or None): [E, edge_in_dim]
         """
+        if self.edge_in_dim is not None and edge_attr is None:
+            raise ValueError(
+                "edge_in_dim was set in __init__, but 'edge_attr' is None in forward(). "
+                "Pass edge features or set edge_in_dim=None."
+            )
+
         x_res = x
         edge_res = edge_attr
 
@@ -287,9 +275,16 @@ class GTConv(MessagePassing):
         else:
             G = None
 
+        # Pre-compute edge value projection for use in message() and edge update
+        if self.edge_in_dim is not None and edge_attr is not None:
+            E_val = self.WE_value(edge_attr).view(-1, self.num_heads, self.head_dim)
+        else:
+            E_val = None
+
         # Message passing / attention aggregation
         out = self.propagate(
-            edge_index, Q=Q, K=K, V=V, G=G, edge_attr=edge_attr, size=None
+            edge_index, Q=Q, K=K, V=V, G=G, edge_attr=edge_attr,
+            E_val=E_val, size=None,
         )
         out = out.view(-1, self.hidden_dim * self.num_aggrs)  # [N, hidden_dim * num_aggrs]
 
@@ -305,13 +300,17 @@ class GTConv(MessagePassing):
         x_out = x1 + ffn_out  # final node output
 
         # ---- Edge updates (if present) ----
-        if self.edge_in_dim is None or edge_attr is None or self._eij is None:
+        if self.edge_in_dim is None or edge_attr is None:
             edge_out = edge_attr
         else:
-            # _eij has shape [E, H, Dh]; we use it as edge context
-            e_context = self._eij.view(-1, self.hidden_dim)  # [E, hidden_dim]
+            # Compute edge representation: (Q_dst * K_src / sqrt(d_h)) * E_val
+            # In source_to_target flow: Q_i=target=edge_index[1], K_j=source=edge_index[0]
+            src, dst = edge_index[0], edge_index[1]
+            eij = (Q[dst] * K[src]) / math.sqrt(self.head_dim)    # [E, H, Dh]
+            eij = eij * E_val                                     # [E, H, Dh]
 
-            e_attn = self.WOe(e_context)  # [E, edge_in_dim]
+            e_context = eij.view(-1, self.hidden_dim)  # [E, hidden_dim]
+            e_attn = self.WOe(e_context)               # [E, edge_in_dim]
             e_attn = self.dropout_layer(e_attn)
 
             e1 = edge_res + e_attn  # residual
@@ -320,12 +319,9 @@ class GTConv(MessagePassing):
             e_ffn = self.dropout_layer(e_ffn)
             edge_out = e1 + e_ffn  # residual, no trailing norm (matches node path)
 
-        # Clear buffer
-        self._eij = None
-
         return x_out, edge_out
 
-    def message(self, Q_i, K_j, V_j, G_j, index, edge_attr=None):
+    def message(self, Q_i, K_j, V_j, G_j, index, edge_attr=None, E_val=None):
         """
         Compute messages on edges.
 
@@ -334,6 +330,7 @@ class GTConv(MessagePassing):
         V_j: [E, H, Dh]
         G_j: [E, H, Dh] or None
         edge_attr: [E, edge_in_dim] or None
+        E_val: [E, H, Dh] or None
 
         Returns:
             Tensor: Attention-weighted values [E, H, Dh].
@@ -347,15 +344,11 @@ class GTConv(MessagePassing):
         if self.edge_in_dim is not None and edge_attr is not None:
             # Additive bias to attention logits (per head)
             E_bias = self.WE_logits(edge_attr)  # [E, H]
-            # Edge contribution to values
-            E_val = self.WE_value(edge_attr).view(-1, self.num_heads, Dh)
-            V_j = V_j + E_val
-
-            # Optionally store an edge representation based on Q,K,E etc.
-            self._eij = logits_vec
+            # Edge contribution to values (pre-computed in forward())
+            if E_val is not None:
+                V_j = V_j + E_val
         else:
             E_bias = 0.0
-            self._eij = logits_vec
 
         # Gating on values (nodes)
         if self.gate and G_j is not None:
