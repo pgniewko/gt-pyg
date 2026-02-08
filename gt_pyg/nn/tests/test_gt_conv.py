@@ -1,4 +1,4 @@
-"""Tests for GTConv normalization symmetry (GitHub #40)."""
+"""Tests for GTConv normalization symmetry (#40) and input validation (#30)."""
 
 import torch
 import pytest
@@ -90,3 +90,17 @@ class TestNormalizationSymmetry:
             torch.allclose(node_mean, torch.zeros_like(node_mean), atol=0.1)
             and torch.allclose(node_std, torch.ones_like(node_std), atol=0.1)
         ), "Node output looks post-normed (zero mean, unit std)"
+
+
+class TestInputValidation:
+    """Verify GTConv rejects invalid constructor arguments with clear errors."""
+
+    def test_num_heads_zero_raises(self):
+        """num_heads=0 should raise ValueError, not ZeroDivisionError."""
+        with pytest.raises(ValueError, match="num_heads must be positive"):
+            GTConv(node_in_dim=16, hidden_dim=16, num_heads=0)
+
+    def test_num_heads_negative_raises(self):
+        """Negative num_heads should raise ValueError."""
+        with pytest.raises(ValueError, match="num_heads must be positive"):
+            GTConv(node_in_dim=16, hidden_dim=16, num_heads=-1)

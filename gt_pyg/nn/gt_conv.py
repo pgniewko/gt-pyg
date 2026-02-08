@@ -59,6 +59,8 @@ class GTConv(MessagePassing):
 
         super().__init__(node_dim=0, aggr=aggr)
 
+        if num_heads <= 0:
+            raise ValueError(f"num_heads must be positive, got {num_heads}")
         if hidden_dim % num_heads != 0:
             raise ValueError(
                 f"hidden_dim ({hidden_dim}) must be divisible by num_heads ({num_heads})"
