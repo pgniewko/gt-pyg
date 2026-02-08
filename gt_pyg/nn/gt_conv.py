@@ -5,7 +5,6 @@ from typing import List, Optional
 # Third party
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 from torch_geometric.nn.aggr import MultiAggregation

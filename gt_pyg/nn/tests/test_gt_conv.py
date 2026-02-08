@@ -148,17 +148,6 @@ class TestGradientFlow:
         assert x.grad is not None
         assert x.grad.abs().sum() > 0
 
-    def test_grad_flows_to_edge_attr(self, conv, edge_index):
-        x = torch.randn(4, 16)
-        edge_attr = torch.randn(4, 8, requires_grad=True)
-
-        _, edge_out = conv(x, edge_index, edge_attr)
-        loss = edge_out.sum()
-        loss.backward()
-
-        assert edge_attr.grad is not None
-        assert edge_attr.grad.abs().sum() > 0
-
     def test_edge_grad_through_edge_update(self, conv, edge_index):
         """edge_attr gradient flows specifically through the edge update path,
         not just through the attention bias/values in the node path."""
