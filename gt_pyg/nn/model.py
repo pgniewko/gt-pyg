@@ -14,12 +14,31 @@ from .mlp import MLP
 
 
 class GraphTransformerNet(nn.Module):
-    """
-    Graph Transformer Network.
+    """Graph Transformer Network with variational (Gaussian) readout.
+
+    Embeds node and (optional) edge features, processes them through a stack
+    of Graph Transformer convolution layers (GTConv), pools to a graph-level
+    representation, and produces per-task predictions via two MLP heads:
+
+    * ``mu_mlp``      -- predicts the mean (mu) of a Gaussian.
+    * ``log_var_mlp`` -- predicts the log-variance, clamped to [-10, 10] for
+      numerical stability.
+
+    During **training** (with ``zero_var=False``), the forward pass samples
+    from the predicted Gaussian using the reparameterization trick::
+
+        prediction = mu + std * epsilon,   epsilon ~ N(0, 1)
+
+    This enables gradient-based optimization of probabilistic objectives such
+    as Gaussian negative log-likelihood (NLL) loss.
+
+    During **evaluation** (or when ``zero_var=True``), the forward pass
+    returns the deterministic mean ``mu``.  The predicted ``log_var`` is
+    always returned so it can be used for uncertainty estimation.
 
     Reference:
-      1. A Generalization of Transformer Networks to Graphs
-         https://arxiv.org/abs/2012.09699
+        A Generalization of Transformer Networks to Graphs
+        https://arxiv.org/abs/2012.09699
     """
 
     def __init__(
@@ -213,17 +232,30 @@ class GraphTransformerNet(nn.Module):
         batch: Union[Batch, Tensor],
         zero_var: bool = False,
     ) -> Tuple[Tensor, Tensor]:
-        """
-        Forward pass of the Graph Transformer Network.
+        """Run the forward pass of the Graph Transformer Network.
+
+        Embeds inputs, runs GTConv layers, pools to graph-level features,
+        and produces predictions through two MLP heads (mu and log_var).
+
+        When ``self.training`` is True and ``zero_var`` is False, the
+        prediction is a stochastic sample using the reparameterization trick::
+
+            pred = mu + exp(0.5 * log_var) * epsilon,  epsilon ~ N(0, 1)
+
+        Otherwise, the prediction is the deterministic mean ``mu``.
+        In both cases ``log_var`` is returned for use in loss computation
+        (e.g., Gaussian NLL) or uncertainty quantification.
 
         Args:
-            x: Node features [num_nodes, node_dim_in].
-            edge_index: Edge indices [2, num_edges].
-            edge_attr: Edge features [num_edges, edge_dim_in] if provided
-                       (required if edge_dim_in was set).
-            batch: Either a `Batch` object or a batch index tensor of shape [num_nodes].
-            zero_var (bool): If True, do NOT sample; return deterministic mu.
-                             (Variance is still predicted and returned via log_var.)
+            x: Node features ``[num_nodes, node_dim_in]``.
+            edge_index: Edge indices ``[2, num_edges]``.
+            edge_attr: Edge features ``[num_edges, edge_dim_in]``.
+                Required if ``edge_dim_in`` was set in the constructor.
+            batch: Either a ``Batch`` object or a batch-index tensor of
+                shape ``[num_nodes]`` mapping each node to its graph.
+            zero_var: If True, skip reparameterization sampling even during
+                training; return the deterministic mean. The ``log_var``
+                head is still evaluated and returned. Defaults to False.
 
         Returns:
             Tuple[Tensor, Tensor]: (prediction, log_var)

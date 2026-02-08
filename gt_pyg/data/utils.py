@@ -229,7 +229,9 @@ def get_gnm_encodings(adjacency: np.ndarray) -> np.ndarray:
     kirchhoff = degree - adjacency
     eigenvalues, eigenvectors = np.linalg.eigh(kirchhoff)
     # Invert non-zero eigenvalues (skip the near-zero translational mode)
-    inv_eigenvalues = np.where(np.abs(eigenvalues) > 1e-10, 1.0 / eigenvalues, 0.0)
+    mask = np.abs(eigenvalues) > 1e-10
+    inv_eigenvalues = np.zeros_like(eigenvalues)
+    np.divide(1.0, eigenvalues, out=inv_eigenvalues, where=mask)
     # Diagonal of Q @ diag(inv_eigenvalues) @ Q^T = sum of Q_ij^2 * inv_eigenvalues_j
     return (eigenvectors ** 2) @ inv_eigenvalues
 

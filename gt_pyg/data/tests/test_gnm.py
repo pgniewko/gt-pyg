@@ -1,5 +1,7 @@
 """Tests for GNM (Gaussian Network Model) encodings."""
 
+import warnings
+
 import numpy as np
 from numpy.linalg import pinv
 
@@ -40,3 +42,23 @@ def test_gnm_symmetric_molecule():
 
     assert result.shape == (4,)
     np.testing.assert_allclose(result, result[0], atol=1e-12)
+
+
+def test_gnm_single_atom_no_warning():
+    """Single-atom molecule (1x1 zero adjacency) should not produce warnings."""
+    adj = np.array([[0]], dtype=float)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # Convert warnings to errors
+        result = get_gnm_encodings(adj)
+
+    assert result.shape == (1,)
+    assert result[0] == 0.0
+
+
+def test_gnm_single_atom_returns_zero():
+    """Single-atom GNM diagonal should be zero (no connectivity)."""
+    adj = np.array([[0]], dtype=float)
+    result = get_gnm_encodings(adj)
+
+    np.testing.assert_allclose(result, [0.0], atol=1e-12)

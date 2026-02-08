@@ -296,3 +296,70 @@ def test_checkpoint_info_includes_version(model, tmp_path):
     info = get_checkpoint_info(path)
     assert "gt_pyg_version" in info
     assert info["gt_pyg_version"] == gt_pyg.__version__
+
+
+# ---- Variational Forward Pass Tests ----
+
+class TestVariationalForward:
+    """Tests verifying the variational (reparameterization) forward pass."""
+
+    @pytest.fixture
+    def multi_graph_input(self):
+        """Multi-graph input (batch_size=2) needed for BatchNorm in train mode."""
+        return {
+            "x": torch.randn(8, 16),
+            "edge_index": torch.tensor([[0, 1, 2, 3, 4, 5], [1, 2, 3, 5, 6, 7]]),
+            "edge_attr": torch.randn(6, 8),
+            "batch": torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
+        }
+
+    def test_eval_mode_deterministic(self, model, sample_input):
+        """Eval mode should produce identical outputs on repeated calls."""
+        model.eval()
+        out1, lv1 = model(**sample_input)
+        out2, lv2 = model(**sample_input)
+        assert torch.allclose(out1, out2)
+        assert torch.allclose(lv1, lv2)
+
+    def test_train_mode_stochastic(self, model, multi_graph_input):
+        """Train mode with zero_var=False should produce varying outputs."""
+        model.train()
+        torch.manual_seed(1)
+        out1, _ = model(**multi_graph_input)
+        torch.manual_seed(2)
+        out2, _ = model(**multi_graph_input)
+        assert not torch.allclose(out1, out2, atol=1e-6)
+
+    def test_zero_var_deterministic_in_train(self, multi_graph_input):
+        """Train mode with zero_var=True should be deterministic.
+
+        Uses LayerNorm (no running-stats drift) and dropout=0 (no random
+        masking) so the only remaining stochastic element is the
+        reparameterization noise — which zero_var disables.
+        """
+        det_model = GraphTransformerNet(
+            node_dim_in=16, edge_dim_in=8, hidden_dim=32,
+            num_gt_layers=2, num_heads=4, norm="ln", dropout=0.0,
+        )
+        det_model.train()
+        out1, _ = det_model(**multi_graph_input, zero_var=True)
+        out2, _ = det_model(**multi_graph_input, zero_var=True)
+        assert torch.allclose(out1, out2)
+
+    def test_log_var_always_returned(self, model, multi_graph_input):
+        """log_var should always be returned, regardless of mode."""
+        model.eval()
+        _, lv_eval = model(**multi_graph_input)
+        assert lv_eval is not None
+        assert lv_eval.shape[-1] == 1  # num_tasks=1
+
+        model.train()
+        _, lv_train = model(**multi_graph_input, zero_var=True)
+        assert lv_train is not None
+
+    def test_log_var_clamped(self, model, sample_input):
+        """log_var should be clamped to [-10, 10]."""
+        model.eval()
+        _, log_var = model(**sample_input)
+        assert log_var.min() >= -10.0
+        assert log_var.max() <= 10.0
