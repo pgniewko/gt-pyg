@@ -6,26 +6,23 @@
 
 `gt_pyg` is an implementation of the **Graph Transformer Architecture** in [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/).
 
-<p align="center"><img src="./assets/gt_v0.5.png" width="600"></p>
-
-This sketch provides an overview of the Graph Transformer Architecture (Dwivedi & Bresson, 2021).  
-In essence, the model implements a **dot-product self-attention network** with a `softmask` function,  
-where `softmask` is a `softmax` applied only over the non-zero elements of the adjacency matrix `(A + I)`.
-
-<p align="center"><img src="./assets/gated_gnn.png" width="600"></p>
-
-This figure illustrates the **gating mechanism** used in the GT model (Chen et al., 2023, *Bioinformatics*).
-
 ---
 
 ## INSTALL
 
-Clone the repository and install:
+Clone the repository, create a virtual environment, and install:
 ```bash
 git clone https://github.com/pgniewko/gt-pyg.git
 cd gt-pyg
+python -m venv .venv
+source .venv/bin/activate
 pip install .
 ```
+
+> **Note:** Always activate the virtual environment before using `gt_pyg`:
+> ```bash
+> source .venv/bin/activate
+> ```
 
 ---
 
@@ -74,54 +71,6 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 ---
 
-## Implementation Notes
-
-This implementation integrates the core principles of the  original **Graph Transformer**.
-
-### 1. A Generalization of Transformer Networks to Graphs
-
-*Dwivedi & Bresson, 2021*
-The Graph Transformer extends self-attention to structured graph inputs
-by incorporating relational and topological context into attention
-computation.
-This implementation closely follows that design while leveraging PyTorch
-Geometric's efficient message-passing API.
-
--   Uses PyG's numerically stable `softmax`, which applies the
-    Log-Sum-Exp trick to avoid overflow.
--   Supports multiple aggregators (`"sum"`, `"mean"`, `"max"`, `"std"`,
-    etc.) via `MultiAggregation` for richer expressiveness, similar to
-    PNA.
--   Disables `qkv_bias` by default for stability and reproducibility.
--   Applies dropout to attention coefficients (shared `dropout` rate,
-    not a separate parameter).
-
-### 2. A Gated Graph Transformer for Protein Complex Structure Quality Assessment
-
-*Chen et al., 2023, Bioinformatics*
-Introduces gating mechanisms that modulate information flow through both
-nodes and edges.
-This implementation optionally includes the same gating logic
-(`gate=True`) to enhance representational power.
-To reproduce the original (ungated) Graph Transformer, set
-`qkv_bias=True` and `gate=False`.
-
-------------------------------------------------------------------------
-
-### Implementation Foundations
-
--   Certain patterns and initialization schemes are adapted from
-    [`TransformerConv`](https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/conv/transformer_conv.py).
--   The design remains fully compatible with PyG's `propagate` API,
-    `Data`, and `Batch` abstractions.
--   For SMILES-to-graph conversion, use `gt_pyg.data.get_tensor_data`.
-    **Do not** use `torch_geometric.utils.from_smiles` — it produces
-    incompatible feature vectors.
--   Small datasets are handled as in-memory lists of `Data` objects,
-    avoiding custom dataset definitions.
-
----
-
 ## Public API
 
 ### Model
@@ -131,7 +80,7 @@ To reproduce the original (ungated) Graph Transformer, set
 | `GraphTransformerNet` | Full model with variational readout (`mu` + `log_var` heads) |
 | `GTConv` | Single Graph Transformer convolution layer |
 | `MLP` | Multi-layer perceptron used in readout heads |
-| `GraphTransformerNet.from_config(cfg)` | Construct a model from a config dict |
+| `GraphTransformerNet.from_config(config)` | Construct a model from a config dict |
 
 ### Checkpointing & Utilities
 
@@ -140,18 +89,18 @@ To reproduce the original (ungated) Graph Transformer, set
 | `model.save_checkpoint(path)` | Save model, optimizer, and metadata |
 | `model.load_checkpoint(path)` | Restore from checkpoint |
 | `get_checkpoint_info(path)` | Read checkpoint metadata without loading weights |
-| `model.freeze(component)` | Freeze parameters by component name |
-| `model.unfreeze(component)` | Unfreeze parameters |
+| `model.freeze(components)` | Freeze parameters by component name |
+| `model.unfreeze(components)` | Unfreeze parameters |
 | `model.get_frozen_status()` | Dict of frozen/unfrozen components |
 
 ### Data
 
 | Symbol | Description |
 |--------|-------------|
-| `get_tensor_data(smiles, labels)` | SMILES + labels to list of PyG `Data` objects |
+| `get_tensor_data(x_smiles, y)` | SMILES + labels to list of PyG `Data` objects |
 | `get_atom_feature_dim()` | Dimensionality of the atom feature vector |
-| `get_gnm_encodings(adj)` | Kirchhoff pseudoinverse diagonal (GNM) |
-| `canonicalize_smiles(smi)` | Canonical SMILES string |
+| `get_gnm_encodings(adjacency)` | Kirchhoff pseudoinverse diagonal (GNM) |
+| `canonicalize_smiles(smiles)` | Canonical SMILES string |
 
 ---
 
@@ -159,7 +108,9 @@ To reproduce the original (ungated) Graph Transformer, set
 
 ### Installation (dev)
 
+First, activate the virtual environment, then install in editable mode with dev dependencies:
 ```bash
+source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
@@ -174,7 +125,8 @@ pytest gt_pyg/ -v
 ## REFERENCES
 
 1. [A Generalization of Transformer Networks to Graphs](https://arxiv.org/abs/2012.09699)  
-2. [A Gated Graph Transformer for Protein Complex Structure Quality Assessment and Its Performance in CASP15](https://academic.oup.com/bioinformatics/article/39/Supplement_1/i308/7210460)
+2. [A Gated Graph Transformer for Protein Complex Structure Quality Assessment
+   (Chen et al., 2023, *Bioinformatics*)](https://academic.oup.com/bioinformatics/article/39/Supplement_1/i308/7210460)
 
 ---
 

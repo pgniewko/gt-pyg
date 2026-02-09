@@ -4,7 +4,6 @@ Validates HBD, HBA, HYDROPHOBIC, POS_IONIZABLE, and NEG_IONIZABLE
 patterns against real drug molecules and simple reference compounds.
 """
 
-import pytest
 from rdkit import Chem
 
 from gt_pyg.data.atom_features import (

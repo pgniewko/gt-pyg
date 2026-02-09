@@ -1,7 +1,6 @@
 """Tests for data/bond_features.py."""
 
 import numpy as np
-import pytest
 from rdkit import Chem
 
 from gt_pyg.data.bond_features import get_bond_feature_dim, get_bond_features

@@ -1,7 +1,6 @@
 """Tests for data/atom_features.py."""
 
 import logging
-import warnings
 
 import numpy as np
 import pytest
@@ -10,10 +9,6 @@ from rdkit.Chem import rdPartialCharges
 
 from gt_pyg.data.atom_features import (
     PERMITTED_ATOMS,
-    PERIOD_CATEGORIES,
-    GROUP_CATEGORIES,
-    RING_COUNT_CATEGORIES,
-    RING_SIZE_CATEGORIES,
     get_atom_feature_dim,
     get_atom_features,
     get_gasteiger_charge,

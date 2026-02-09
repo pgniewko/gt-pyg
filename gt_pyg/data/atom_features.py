@@ -70,6 +70,61 @@ PERMITTED_ATOMS = [
 PERIODIC_TABLE = Chem.GetPeriodicTable()
 
 
+def encode_ring_stats(
+    stats: Optional[Dict[str, Any]],
+) -> List[int]:
+    """Encode ring membership stats into a fixed-length feature vector.
+
+    Produces a vector of length 25:
+        - ring count one-hot (5)
+        - min ring size one-hot (9)
+        - max ring size one-hot (9)
+        - in any aromatic ring (1)
+        - in any non-aromatic ring (1)
+
+    Args:
+        stats: Ring stats dict with keys ``'count'``, ``'min_size'``,
+            ``'max_size'``, ``'has_aromatic'``, ``'has_non_aromatic'``,
+            or ``None`` for an all-zeros encoding.
+
+    Returns:
+        List[int]: Feature vector of length 25.
+    """
+    ring_count_enc = [0] * len(RING_COUNT_CATEGORIES)
+    min_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
+    max_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
+    in_any_aromatic_ring = 0
+    in_any_non_aromatic_ring = 0
+
+    if stats is not None:
+        count_val = stats["count"]
+        if count_val > 3:
+            count_val = "MoreThanThree"
+        ring_count_enc = one_hot_encoding(count_val, RING_COUNT_CATEGORIES)
+
+        if stats["min_size"] is not None:
+            min_size_val = stats["min_size"]
+            if min_size_val > 10:
+                min_size_val = "MoreThanTen"
+            min_ring_size_enc = one_hot_encoding(min_size_val, RING_SIZE_CATEGORIES)
+
+        if stats["max_size"] is not None:
+            max_size_val = stats["max_size"]
+            if max_size_val > 10:
+                max_size_val = "MoreThanTen"
+            max_ring_size_enc = one_hot_encoding(max_size_val, RING_SIZE_CATEGORIES)
+
+        in_any_aromatic_ring = int(stats["has_aromatic"])
+        in_any_non_aromatic_ring = int(stats["has_non_aromatic"])
+
+    return (
+        ring_count_enc
+        + min_ring_size_enc
+        + max_ring_size_enc
+        + [in_any_aromatic_ring, in_any_non_aromatic_ring]
+    )
+
+
 def one_hot_encoding(x: Union[str, int, Any], permitted_list: List) -> List[int]:
     """Return a one-hot encoding for ``x`` over a permitted vocabulary.
 
@@ -359,44 +414,10 @@ def get_atom_features(
         atom_feature_vector += n_hydrogens_enc
 
     # Ring membership statistics
-    # Only if precomputed stats are provided; otherwise, all zeros
-    ring_count_enc = [0] * len(RING_COUNT_CATEGORIES)
-    min_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
-    max_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
-    in_any_aromatic_ring = 0
-    in_any_non_aromatic_ring = 0
-
+    stats = None
     if atom_ring_stats is not None:
-        idx = atom.GetIdx()
-        stats = atom_ring_stats.get(idx)
-        if stats is not None:
-            # Ring count
-            count_val = stats["count"]
-            if count_val > 3:
-                count_val = "MoreThanThree"
-            ring_count_enc = one_hot_encoding(count_val, RING_COUNT_CATEGORIES)
-
-            # Min ring size
-            if stats["min_size"] is not None:
-                min_size_val = stats["min_size"]
-                if min_size_val > 10:
-                    min_size_val = "MoreThanTen"
-                min_ring_size_enc = one_hot_encoding(min_size_val, RING_SIZE_CATEGORIES)
-
-            # Max ring size
-            if stats["max_size"] is not None:
-                max_size_val = stats["max_size"]
-                if max_size_val > 10:
-                    max_size_val = "MoreThanTen"
-                max_ring_size_enc = one_hot_encoding(max_size_val, RING_SIZE_CATEGORIES)
-
-            in_any_aromatic_ring = int(stats["has_aromatic"])
-            in_any_non_aromatic_ring = int(stats["has_non_aromatic"])
-
-    atom_feature_vector += ring_count_enc
-    atom_feature_vector += min_ring_size_enc
-    atom_feature_vector += max_ring_size_enc
-    atom_feature_vector += [in_any_aromatic_ring, in_any_non_aromatic_ring]
+        stats = atom_ring_stats.get(atom.GetIdx())
+    atom_feature_vector += encode_ring_stats(stats)
 
     # Gasteiger partial charge (1 continuous, bounded [-1, 1])
     gasteiger = get_gasteiger_charge(atom)
