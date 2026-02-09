@@ -225,6 +225,10 @@ def get_gnm_encodings(adjacency: np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: Diagonal of the Kirchhoff pseudoinverse with shape ``[N]``.
     """
+    n = adjacency.shape[0]
+    if n <= 1:
+        return np.zeros(n, dtype=float)
+
     degree = np.diag(adjacency.sum(axis=1))
     kirchhoff = degree - adjacency
     eigenvalues, eigenvectors = np.linalg.eigh(kirchhoff)
