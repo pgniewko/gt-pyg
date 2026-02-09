@@ -1,12 +1,12 @@
 # Atom featurization
 from .atom_features import (
-    PERIODIC_TABLE,
     RING_COUNT_CATEGORIES,
     RING_SIZE_CATEGORIES,
     PERIOD_CATEGORIES,
     GROUP_CATEGORIES,
     PERMITTED_ATOMS,
     # Functions
+    encode_ring_stats,
     one_hot_encoding,
     get_period,
     get_group,
@@ -32,13 +32,13 @@ from .utils import (
 
 __all__ = [
     # Atom feature constants
-    "PERIODIC_TABLE",
     "RING_COUNT_CATEGORIES",
     "RING_SIZE_CATEGORIES",
     "PERIOD_CATEGORIES",
     "GROUP_CATEGORIES",
     "PERMITTED_ATOMS",
     # Atom feature functions
+    "encode_ring_stats",
     "one_hot_encoding",
     "get_period",
     "get_group",

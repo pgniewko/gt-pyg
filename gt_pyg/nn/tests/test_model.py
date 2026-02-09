@@ -4,7 +4,6 @@ import logging
 
 import pytest
 import torch
-from torch import nn
 
 import gt_pyg
 from gt_pyg.nn import GraphTransformerNet, get_checkpoint_info, load_checkpoint

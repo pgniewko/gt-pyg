@@ -7,8 +7,7 @@ from rdkit import Chem
 
 # Local imports - shared constants and utilities
 from .atom_features import (
-    RING_COUNT_CATEGORIES,
-    RING_SIZE_CATEGORIES,
+    encode_ring_stats,
     one_hot_encoding,
 )
 
@@ -61,43 +60,10 @@ def get_bond_features(
         bond_feature_vector += stereo_type_enc
 
     # Ring membership statistics
-    ring_count_enc = [0] * len(RING_COUNT_CATEGORIES)
-    min_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
-    max_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
-    in_any_aromatic_ring = 0
-    in_any_non_aromatic_ring = 0
-
+    stats = None
     if bond_ring_stats is not None:
-        idx = bond.GetIdx()
-        stats = bond_ring_stats.get(idx)
-        if stats is not None:
-            # Ring count
-            count_val = stats["count"]
-            if count_val > 3:
-                count_val = "MoreThanThree"
-            ring_count_enc = one_hot_encoding(count_val, RING_COUNT_CATEGORIES)
-
-            # Min ring size
-            if stats["min_size"] is not None:
-                min_size_val = stats["min_size"]
-                if min_size_val > 10:
-                    min_size_val = "MoreThanTen"
-                min_ring_size_enc = one_hot_encoding(min_size_val, RING_SIZE_CATEGORIES)
-
-            # Max ring size
-            if stats["max_size"] is not None:
-                max_size_val = stats["max_size"]
-                if max_size_val > 10:
-                    max_size_val = "MoreThanTen"
-                max_ring_size_enc = one_hot_encoding(max_size_val, RING_SIZE_CATEGORIES)
-
-            in_any_aromatic_ring = int(stats["has_aromatic"])
-            in_any_non_aromatic_ring = int(stats["has_non_aromatic"])
-
-    bond_feature_vector += ring_count_enc
-    bond_feature_vector += min_ring_size_enc
-    bond_feature_vector += max_ring_size_enc
-    bond_feature_vector += [in_any_aromatic_ring, in_any_non_aromatic_ring]
+        stats = bond_ring_stats.get(bond.GetIdx())
+    bond_feature_vector += encode_ring_stats(stats)
 
     return np.array(bond_feature_vector)
 
