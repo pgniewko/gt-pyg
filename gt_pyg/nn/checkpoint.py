@@ -119,7 +119,9 @@ def get_checkpoint_info(path: Union[str, Path]) -> Dict[str, Any]:
         Dict with version, created_at, config, epoch, etc. (no state_dicts).
     """
     # NOTE: weights_only=False is intentional — see load_checkpoint above.
-    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    # mmap=True avoids loading large tensor data into RAM — only metadata
+    # keys are deserialized since we never access state dicts.
+    checkpoint = torch.load(path, map_location="cpu", weights_only=False, mmap=True)
     info = {}
     for key in ["checkpoint_version", "gt_pyg_version", "created_at",
                 "model_config", "epoch", "global_step", "best_metric",
