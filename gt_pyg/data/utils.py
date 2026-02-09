@@ -256,10 +256,8 @@ def _to_float_sequence(
     """
     if isinstance(y_val, (float, int, np.floating, np.integer)):
         return np.array([float(y_val)], dtype=np.float32)
-    arr = np.array(y_val, dtype=np.float32)
-    if arr.dtype == object:  # handle None values
-        arr = np.array([np.nan if v is None else float(v) for v in y_val], dtype=np.float32)
-    return arr
+    cleaned = [np.nan if v is None else float(v) for v in y_val]
+    return np.array(cleaned, dtype=np.float32)
 
 
 def get_tensor_data(
