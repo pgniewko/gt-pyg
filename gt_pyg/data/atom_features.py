@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 from rdkit import Chem
 
+logger = logging.getLogger(__name__)
+
 
 # -----------------------------
 # Pharmacophore SMARTS patterns (precompiled at module load)
@@ -81,6 +83,10 @@ def one_hot_encoding(x: Union[str, int, Any], permitted_list: List) -> List[int]
         List[int]: One-hot vector of length ``len(permitted_list)``.
     """
     if x not in permitted_list:
+        logger.debug(
+            "Unknown value %r mapped to catch-all %r in one_hot_encoding",
+            x, permitted_list[-1],
+        )
         x = permitted_list[-1]
     return [int(x == s) for s in permitted_list]
 
@@ -106,7 +112,7 @@ def get_gasteiger_charge(atom: Chem.Atom, clip: float = 2.0) -> float:
     try:
         charge = float(atom.GetDoubleProp("_GasteigerCharge"))
         if np.isnan(charge) or np.isinf(charge):
-            logging.warning(
+            logger.warning(
                 "Gasteiger charge is %s for atom %s (idx %d); defaulting to 0.0",
                 "NaN" if np.isnan(charge) else "Inf",
                 atom.GetSymbol(),
@@ -115,7 +121,7 @@ def get_gasteiger_charge(atom: Chem.Atom, clip: float = 2.0) -> float:
             return 0.0
         return np.clip(charge, -clip, clip) / clip
     except Exception as e:
-        logging.warning(
+        logger.warning(
             "Failed to retrieve Gasteiger charge for atom %s (idx %d): %s",
             atom.GetSymbol(),
             atom.GetIdx(),
@@ -194,7 +200,7 @@ def get_period(atomic_num: int) -> int:
     # Period 6: Cs(55) to Rn(86)
     # Period 7: Fr(87) onwards
     if atomic_num <= 0:
-        logging.warning(
+        logger.warning(
             "Dummy/invalid atomic number %d mapped to period 0", atomic_num,
         )
         return 0
@@ -416,9 +422,9 @@ def get_atom_feature_dim(
     """Return the dimensionality of the atom feature vector.
 
     Calculates the expected length of the feature vector based on the
-    configuration options.  This does **not** include the GNM
-    (Kirchhoff pseudoinverse diagonal) term, which is appended
-    separately by :func:`get_tensor_data`.
+    configuration options.  The GNM slot (Kirchhoff pseudoinverse
+    diagonal) is always present in the vector (as ``0.0`` when
+    ``gnm_value=None``).
 
     Args:
         use_stereochemistry (bool, optional): Whether stereochemistry features are included.
@@ -431,6 +437,8 @@ def get_atom_feature_dim(
     """
     # Use a simple test molecule to compute the dimension
     mol = Chem.MolFromSmiles("C")
+    from rdkit.Chem import rdPartialCharges
+    rdPartialCharges.ComputeGasteigerCharges(mol)
     atom = mol.GetAtomWithIdx(0)
     features = get_atom_features(
         atom,
