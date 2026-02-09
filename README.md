@@ -20,16 +20,11 @@ This figure illustrates the **gating mechanism** used in the GT model (Chen et a
 
 ## INSTALL
 
-Clone and install the software:
+Clone the repository and install:
 ```bash
 git clone https://github.com/pgniewko/gt-pyg.git
+cd gt-pyg
 pip install .
-```
-
-Create and activate the conda environment:
-```bash
-conda env create -f environment.yml
-conda activate gt
 ```
 
 ---
@@ -98,8 +93,8 @@ Geometric's efficient message-passing API.
     etc.) via `MultiAggregation` for richer expressiveness, similar to
     PNA.
 -   Disables `qkv_bias` by default for stability and reproducibility.
--   Adds **attention dropout (`attn_dropout`)** to regularize attention
-    coefficients directly.
+-   Applies dropout to attention coefficients (shared `dropout` rate,
+    not a separate parameter).
 
 ### 2. A Gated Graph Transformer for Protein Complex Structure Quality Assessment
 
@@ -119,10 +114,44 @@ To reproduce the original (ungated) Graph Transformer, set
     [`TransformerConv`](https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/conv/transformer_conv.py).
 -   The design remains fully compatible with PyG's `propagate` API,
     `Data`, and `Batch` abstractions.
--   For SMILES graph conversion, use
-    [`torch_geometric.utils.from_smiles`](https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.from_smiles).
+-   For SMILES-to-graph conversion, use `gt_pyg.data.get_tensor_data`.
+    **Do not** use `torch_geometric.utils.from_smiles` — it produces
+    incompatible feature vectors.
 -   Small datasets are handled as in-memory lists of `Data` objects,
     avoiding custom dataset definitions.
+
+---
+
+## Public API
+
+### Model
+
+| Symbol | Description |
+|--------|-------------|
+| `GraphTransformerNet` | Full model with variational readout (`mu` + `log_var` heads) |
+| `GTConv` | Single Graph Transformer convolution layer |
+| `MLP` | Multi-layer perceptron used in readout heads |
+| `GraphTransformerNet.from_config(cfg)` | Construct a model from a config dict |
+
+### Checkpointing & Utilities
+
+| Symbol | Description |
+|--------|-------------|
+| `model.save_checkpoint(path)` | Save model, optimizer, and metadata |
+| `model.load_checkpoint(path)` | Restore from checkpoint |
+| `get_checkpoint_info(path)` | Read checkpoint metadata without loading weights |
+| `model.freeze(component)` | Freeze parameters by component name |
+| `model.unfreeze(component)` | Unfreeze parameters |
+| `model.get_frozen_status()` | Dict of frozen/unfrozen components |
+
+### Data
+
+| Symbol | Description |
+|--------|-------------|
+| `get_tensor_data(smiles, labels)` | SMILES + labels to list of PyG `Data` objects |
+| `get_atom_feature_dim()` | Dimensionality of the atom feature vector |
+| `get_gnm_encodings(adj)` | Kirchhoff pseudoinverse diagonal (GNM) |
+| `canonicalize_smiles(smi)` | Canonical SMILES string |
 
 ---
 
