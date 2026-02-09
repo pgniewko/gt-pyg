@@ -14,12 +14,31 @@ from .mlp import MLP
 
 
 class GraphTransformerNet(nn.Module):
-    """
-    Graph Transformer Network.
+    """Graph Transformer Network with variational (Gaussian) readout.
+
+    Embeds node and (optional) edge features, processes them through a stack
+    of GTConv layers, pools to a graph-level representation, and produces
+    per-task predictions via two MLP heads:
+
+    * ``mu_mlp``      -- predicts the mean of a Gaussian.
+    * ``log_var_mlp`` -- predicts the log-variance (clamped to [-10, 10]).
+
+    During **training** the forward pass samples from the predicted Gaussian
+    using the reparameterization trick::
+
+        prediction = mu + std * epsilon,   epsilon ~ N(0, 1)
+
+    This enables gradient-based optimization of probabilistic objectives
+    (e.g. Gaussian NLL loss).  Set ``zero_var=True`` to disable sampling
+    and return the deterministic mean instead.
+
+    During **evaluation** the forward pass always returns the deterministic
+    mean.  ``log_var`` is always returned for loss computation or uncertainty
+    estimation.
 
     Reference:
-      1. A Generalization of Transformer Networks to Graphs
-         https://arxiv.org/abs/2012.09699
+        A Generalization of Transformer Networks to Graphs
+        https://arxiv.org/abs/2012.09699
     """
 
     def __init__(
@@ -213,22 +232,25 @@ class GraphTransformerNet(nn.Module):
         batch: Union[Batch, Tensor],
         zero_var: bool = False,
     ) -> Tuple[Tensor, Tensor]:
-        """
-        Forward pass of the Graph Transformer Network.
+        """Forward pass with variational (reparameterization) sampling.
+
+        In training mode (``zero_var=False``), predictions are stochastic::
+
+            pred = mu + exp(0.5 * log_var) * epsilon,  epsilon ~ N(0, 1)
+
+        In eval mode (or ``zero_var=True``), predictions are the
+        deterministic mean ``mu``.  ``log_var`` is always returned.
 
         Args:
-            x: Node features [num_nodes, node_dim_in].
-            edge_index: Edge indices [2, num_edges].
-            edge_attr: Edge features [num_edges, edge_dim_in] if provided
-                       (required if edge_dim_in was set).
-            batch: Either a `Batch` object or a batch index tensor of shape [num_nodes].
-            zero_var (bool): If True, do NOT sample; return deterministic mu.
-                             (Variance is still predicted and returned via log_var.)
+            x: Node features ``[num_nodes, node_dim_in]``.
+            edge_index: Edge indices ``[2, num_edges]``.
+            edge_attr: Edge features ``[num_edges, edge_dim_in]``.
+                Required if ``edge_dim_in`` was set.
+            batch: ``Batch`` object or batch-index tensor ``[num_nodes]``.
+            zero_var: If True, skip sampling even during training.
 
         Returns:
-            Tuple[Tensor, Tensor]: (prediction, log_var)
-                - prediction: [batch_size, num_tasks]
-                - log_var:    [batch_size, num_tasks]
+            (prediction, log_var) — both ``[batch_size, num_tasks]``.
         """
         # Node embedding
         h = self.node_emb(x)  # [N, H]
