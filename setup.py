@@ -23,6 +23,7 @@ setup(
         "examples": [
             "notebook",
             "ipykernel",
+            "ipywidgets",
             "pandas",
             "matplotlib",
             "seaborn",
