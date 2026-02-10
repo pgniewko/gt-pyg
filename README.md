@@ -19,6 +19,16 @@ source .venv/bin/activate
 pip install .
 ```
 
+To run the example notebooks, install with the `examples` extra:
+```bash
+pip install -e ".[examples]"
+```
+
+To install everything (dev + examples):
+```bash
+pip install -e ".[all]"
+```
+
 > **Note:** Always activate the virtual environment before using `gt_pyg`:
 > ```bash
 > source .venv/bin/activate

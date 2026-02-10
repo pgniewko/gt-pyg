@@ -262,19 +262,23 @@ def _to_float_sequence(
 
 def get_tensor_data(
     x_smiles: List[str],
-    y: List[Union[float, int, Sequence[Optional[float]], np.ndarray]],
+    y: Optional[List[Union[float, int, Sequence[Optional[float]], np.ndarray]]] = None,
     gnm: bool = True,
 ) -> List[Data]:
-    """Build torch_geometric molecular graphs with labels and masks.
+    """Build torch_geometric molecular graphs with optional labels and masks.
 
-    Each sample is constructed from a SMILES string and a label (single- or multi-task).
-    Missing task labels can be ``None``/``np.nan``; a mask ``y_mask`` (1.0=present,
-    0.0=missing) is included per sample.
+    Each sample is constructed from a SMILES string and an optional label
+    (single- or multi-task).  When ``y`` is provided, missing task labels can
+    be ``None``/``np.nan``; a mask ``y_mask`` (1.0=present, 0.0=missing) is
+    included per sample.  When ``y`` is ``None`` (inference mode), the
+    returned ``Data`` objects contain only graph features — no ``y`` or
+    ``y_mask`` attributes.
 
     Args:
         x_smiles (List[str]): SMILES strings.
-        y (List[Union[float, int, Sequence[Optional[float]], np.ndarray]]): Per-sample labels:
-            single float/int (single-task) or a sequence/array (multi-task).
+        y (Optional[List[...]]): Per-sample labels: single float/int
+            (single-task) or a sequence/array (multi-task).  ``None`` to
+            build graphs without labels (inference).
         gnm (bool, optional): If True, compute the GNM (Kirchhoff pseudoinverse
             diagonal) and populate the corresponding node feature.  When False
             the feature is left at ``0.0``.  Defaults to ``True``.
@@ -284,18 +288,21 @@ def get_tensor_data(
             - ``x`` (torch.FloatTensor): Node features ``[N, F]``.
             - ``edge_index`` (torch.LongTensor): COO edges ``[2, E]``.
             - ``edge_attr`` (torch.FloatTensor): Edge features ``[E, D]``.
-            - ``y`` (torch.FloatTensor): Task targets ``[1, T]``.
-            - ``y_mask`` (torch.FloatTensor): Mask ``[1, T]`` (1=present, 0=missing).
+            - ``y`` (torch.FloatTensor): Task targets ``[1, T]`` *(only when y is provided)*.
+            - ``y_mask`` (torch.FloatTensor): Mask ``[1, T]`` *(only when y is provided)*.
     """
-    if len(x_smiles) != len(y):
+    has_labels = y is not None
+
+    if has_labels and len(x_smiles) != len(y):
         raise ValueError(
             f"x_smiles and y must have the same length, "
             f"got {len(x_smiles)} and {len(y)}"
         )
 
     data_list: List[Data] = []
+    y_iter = y if has_labels else [None] * len(x_smiles)
 
-    for smiles, y_val in tqdm(zip(x_smiles, y), total=len(x_smiles), desc="Processing data"):
+    for smiles, y_val in tqdm(zip(x_smiles, y_iter), total=len(x_smiles), desc="Processing data"):
         # Parse and canonicalize SMILES (single parse)
         mol = _canonicalize_mol(smiles)
         if mol is None:
@@ -354,21 +361,21 @@ def get_tensor_data(
             )
         edge_attr = torch.as_tensor(np.asarray(edge_attr_feat), dtype=torch.float)
 
-        # Labels (multi-task friendly)
-        # Shape [1, T] so PyG batching stacks to [B, T], matching model output.
-        y_arr = _to_float_sequence(y_val)  # [T]
-        y_mask_arr = np.isfinite(y_arr).astype(np.float32)
-        y_tensor = torch.as_tensor(y_arr, dtype=torch.float).unsqueeze(0)       # [1, T]
-        y_mask_tensor = torch.as_tensor(y_mask_arr, dtype=torch.float).unsqueeze(0)  # [1, T]
-
-        data_list.append(
-            Data(
-                x=x,
-                edge_index=edge_index,
-                edge_attr=edge_attr,
-                y=y_tensor,          # [1, num_tasks]
-                y_mask=y_mask_tensor  # [1, num_tasks]
-            )
+        # Build Data object
+        data = Data(
+            x=x,
+            edge_index=edge_index,
+            edge_attr=edge_attr,
         )
+
+        # Labels (multi-task friendly) — only when y is provided
+        # Shape [1, T] so PyG batching stacks to [B, T], matching model output.
+        if has_labels:
+            y_arr = _to_float_sequence(y_val)  # [T]
+            y_mask_arr = np.isfinite(y_arr).astype(np.float32)
+            data.y = torch.as_tensor(y_arr, dtype=torch.float).unsqueeze(0)           # [1, T]
+            data.y_mask = torch.as_tensor(y_mask_arr, dtype=torch.float).unsqueeze(0)  # [1, T]
+
+        data_list.append(data)
 
     return data_list
