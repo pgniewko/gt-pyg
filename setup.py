@@ -25,6 +25,7 @@ setup(
             "ipykernel",
             "pandas",
             "matplotlib",
+            "seaborn",
             "scikit-learn",
             "scipy",
         ],
