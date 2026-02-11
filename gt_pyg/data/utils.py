@@ -217,7 +217,7 @@ def get_gnm_encodings(adjacency: np.ndarray) -> np.ndarray:
     """Compute Gaussian Network Model (GNM) diagonal encodings.
 
     Builds the Kirchhoff (graph Laplacian) matrix from the adjacency matrix
-    and returns the diagonal of its pseudoinverse via eigendecomposition.
+    and returns the diagonal of its pseudoinverse.
 
     Args:
         adjacency (np.ndarray): Adjacency matrix with shape ``[N, N]``.
@@ -231,11 +231,7 @@ def get_gnm_encodings(adjacency: np.ndarray) -> np.ndarray:
 
     degree = np.diag(adjacency.sum(axis=1))
     kirchhoff = degree - adjacency
-    eigenvalues, eigenvectors = np.linalg.eigh(kirchhoff)
-    # Invert non-zero eigenvalues (skip the near-zero translational mode)
-    inv_eigenvalues = np.where(np.abs(eigenvalues) > 1e-10, 1.0 / eigenvalues, 0.0)
-    # Diagonal of Q @ diag(inv_eigenvalues) @ Q^T = sum of Q_ij^2 * inv_eigenvalues_j
-    return (eigenvectors ** 2) @ inv_eigenvalues
+    return np.diag(np.linalg.pinv(kirchhoff))
 
 
 def _to_float_sequence(
