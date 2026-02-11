@@ -20,6 +20,20 @@ setup(
     ],
     extras_require={
         "dev": ["pytest>=7.0"],
+        "examples": [
+            "notebook",
+            "ipykernel",
+            "ipywidgets",
+            "pandas",
+            "matplotlib",
+            "seaborn",
+            "scikit-learn",
+            "scipy",
+        ],
+        "all": [
+            "gt_pyg[dev]",
+            "gt_pyg[examples]",
+        ],
     },
     include_package_data=True,
 )

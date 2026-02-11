@@ -106,3 +106,45 @@ class TestLengthValidation:
     def test_equal_length_succeeds(self):
         data_list = get_tensor_data([ETHANOL, METHANE], [1.0, 2.0])
         assert len(data_list) == 2
+
+
+# ---------------------------------------------------------------------------
+# Label-free inference (y=None)
+# ---------------------------------------------------------------------------
+
+class TestNoLabels:
+    """When y is omitted, Data objects should lack y/y_mask but have features."""
+
+    def test_no_labels_missing_y(self):
+        data_list = get_tensor_data([ETHANOL])
+        d = data_list[0]
+        assert not hasattr(d, "y") or d.y is None
+        assert not hasattr(d, "y_mask") or d.y_mask is None
+
+    def test_no_labels_has_features(self):
+        data_list = get_tensor_data([ETHANOL])
+        d = data_list[0]
+        assert d.x is not None and d.x.shape[0] > 0
+        assert d.edge_index is not None and d.edge_index.shape[1] > 0
+        assert d.edge_attr is not None and d.edge_attr.shape[0] > 0
+
+    def test_no_labels_batch(self):
+        data_list = get_tensor_data([ETHANOL, METHANE, BENZENE])
+        batch = Batch.from_data_list(data_list)
+        # batch.x should combine all nodes
+        total_nodes = sum(d.x.shape[0] for d in data_list)
+        assert batch.x.shape[0] == total_nodes
+        # y should not be present
+        assert not hasattr(batch, "y") or batch.y is None
+
+    def test_with_labels_unchanged(self):
+        """Existing behavior: labels produce y and y_mask."""
+        data_list = get_tensor_data([ETHANOL], [[1.0, 2.0]])
+        d = data_list[0]
+        assert d.y is not None
+        assert d.y.shape == (1, 2)
+        assert d.y_mask is not None
+        assert d.y_mask.shape == (1, 2)
+
+    def test_empty_smiles_no_labels(self):
+        assert get_tensor_data([]) == []

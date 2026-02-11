@@ -66,10 +66,6 @@ PERMITTED_ATOMS = [
     "Zr", "Cr", "Pt", "Hg", "Pb", "Unknown",
 ]
 
-# Use RDKit's periodic table helper
-PERIODIC_TABLE = Chem.GetPeriodicTable()
-
-
 def encode_ring_stats(
     stats: Optional[Dict[str, Any]],
 ) -> List[int]:

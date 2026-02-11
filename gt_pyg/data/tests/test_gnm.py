@@ -63,3 +63,18 @@ def test_gnm_single_atom_no_warning():
 
     assert result.shape == (1,)
     assert result[0] == 0.0
+
+
+def test_gnm_multi_atom_no_warning():
+    """Multi-atom molecule should not produce divide-by-zero warnings."""
+    adj = np.array([
+        [0, 1, 0],
+        [1, 0, 1],
+        [0, 1, 0],
+    ], dtype=float)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = get_gnm_encodings(adj)
+
+    assert result.shape == (3,)
