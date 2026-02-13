@@ -152,8 +152,8 @@ pytest gt_pyg/ -v
 
 ## COPYRIGHT NOTICE
 
-Copyright (C) 2023-Present
-**Pawel Gniewek**
-Email: gniewko.pablo@gmail.com
-License: MIT
-All rights reserved.
+Copyright (C) 2023-Present          
+**Pawel Gniewek**        
+Email: gniewko.pablo@gmail.com          
+License: MIT             
+All rights reserved.         
