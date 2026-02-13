@@ -10,23 +10,18 @@
 
 ## INSTALL
 
-Install directly from GitHub:
-```bash
-pip install git+https://github.com/pgniewko/gt-pyg.git
-```
-
-To install a specific tagged version (e.g. `v1.6.0-beta.1`):
-```bash
-pip install git+https://github.com/pgniewko/gt-pyg.git@v1.6.0-beta.1
-```
-
-Or clone the repository and install locally:
+Clone the repository and install locally:
 ```bash
 git clone https://github.com/pgniewko/gt-pyg.git
 cd gt-pyg
 python -m venv .venv
 source .venv/bin/activate
 pip install .
+```
+
+Alternatively, install directly from GitHub (call `source .venv/bin/activate` first):
+```bash
+pip install git+https://github.com/pgniewko/gt-pyg.git
 ```
 
 To run the example notebooks, install with the `examples` extra:
