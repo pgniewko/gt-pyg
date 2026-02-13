@@ -1,5 +1,5 @@
-> Notice: This is research code that will not necessarily be maintained in the future.  
-> The code is under development, so make sure you are using the most recent version.  
+> Notice: This is research code that will not necessarily be maintained in the future.
+> The code is under development, so make sure you are using the most recent version.
 > We welcome bug reports and PRs but make no guarantees about fixes or responses.
 
 ## DESCRIPTION
@@ -10,7 +10,17 @@
 
 ## INSTALL
 
-Clone the repository, create a virtual environment, and install:
+Install directly from GitHub:
+```bash
+pip install git+https://github.com/pgniewko/gt-pyg.git
+```
+
+To install a specific tagged version (e.g. `v1.6.0-beta.1`):
+```bash
+pip install git+https://github.com/pgniewko/gt-pyg.git@v1.6.0-beta.1
+```
+
+Or clone the repository and install locally:
 ```bash
 git clone https://github.com/pgniewko/gt-pyg.git
 cd gt-pyg
@@ -29,11 +39,6 @@ To install everything (dev + examples):
 pip install -e ".[all]"
 ```
 
-> **Note:** Always activate the virtual environment before using `gt_pyg`:
-> ```bash
-> source .venv/bin/activate
-> ```
-
 ---
 
 ## USAGE
@@ -42,8 +47,7 @@ The following code snippet demonstrates how to test the installation of `gt-pyg`
 
 ```python
 import torch
-from torch_geometric.data import Data
-from gt_pyg.nn.gt_conv import GTConv
+from gt_pyg import GTConv
 
 num_nodes = 10
 num_node_features = 3
@@ -72,7 +76,7 @@ with columns `SMILES` and `logS`, you can prepare a `DataLoader` object as follo
 ```python
 import pandas as pd
 from torch_geometric.loader import DataLoader
-from gt_pyg.data import get_tensor_data
+from gt_pyg import get_tensor_data
 
 dataset = pd.read_csv('solubility.csv')
 tr_dataset = get_tensor_data(dataset['SMILES'].tolist(), dataset['logS'].tolist())
@@ -83,7 +87,7 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 ## Public API
 
-### Model
+### Model (`gt_pyg.nn`)
 
 | Symbol | Description |
 |--------|-------------|
@@ -92,7 +96,7 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 | `MLP` | Multi-layer perceptron used in readout heads |
 | `GraphTransformerNet.from_config(config)` | Construct a model from a config dict |
 
-### Checkpointing & Utilities
+### Checkpointing & Utilities (`gt_pyg.nn`)
 
 | Symbol | Description |
 |--------|-------------|
@@ -103,14 +107,17 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 | `model.unfreeze(components)` | Unfreeze parameters |
 | `model.get_frozen_status()` | Dict of frozen/unfrozen components |
 
-### Data
+### Data (`gt_pyg.data`)
 
 | Symbol | Description |
 |--------|-------------|
 | `get_tensor_data(x_smiles, y)` | SMILES + labels to list of PyG `Data` objects |
 | `get_atom_feature_dim()` | Dimensionality of the atom feature vector |
+| `get_bond_feature_dim()` | Dimensionality of the bond feature vector |
 | `get_gnm_encodings(adjacency)` | Kirchhoff pseudoinverse diagonal (GNM) |
 | `canonicalize_smiles(smiles)` | Canonical SMILES string |
+
+`GraphTransformerNet`, `GTConv`, `MLP`, and `get_tensor_data` are also available via the top-level `gt_pyg` import.
 
 ---
 
@@ -118,8 +125,11 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 ### Installation (dev)
 
-First, activate the virtual environment, then install in editable mode with dev dependencies:
+Clone the repository, create a virtual environment, and install in editable mode with dev dependencies:
 ```bash
+git clone https://github.com/pgniewko/gt-pyg.git
+cd gt-pyg
+python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 ```
@@ -134,7 +144,7 @@ pytest gt_pyg/ -v
 
 ## REFERENCES
 
-1. [A Generalization of Transformer Networks to Graphs](https://arxiv.org/abs/2012.09699)  
+1. [A Generalization of Transformer Networks to Graphs](https://arxiv.org/abs/2012.09699)
 2. [A Gated Graph Transformer for Protein Complex Structure Quality Assessment
    (Chen et al., 2023, *Bioinformatics*)](https://academic.oup.com/bioinformatics/article/39/Supplement_1/i308/7210460)
 
@@ -142,8 +152,8 @@ pytest gt_pyg/ -v
 
 ## COPYRIGHT NOTICE
 
-Copyright (C) 2023-Present   
-**Pawel Gniewek**  
-Email: gniewko.pablo@gmail.com  
-License: MIT  
+Copyright (C) 2023-Present
+**Pawel Gniewek**
+Email: gniewko.pablo@gmail.com
+License: MIT
 All rights reserved.
