@@ -4,6 +4,22 @@ import os
 import re
 
 
+def _normalize_prerelease(ver: str) -> str:
+    """Convert common pre-release tag formats to PEP 440.
+
+    Examples:
+        1.6.0-beta.1  → 1.6.0b1
+        1.6.0-alpha.2 → 1.6.0a2
+        1.6.0-rc.3    → 1.6.0rc3
+        2.0.0a1       → 2.0.0a1   (already compliant, unchanged)
+        1.5.8         → 1.5.8     (no pre-release, unchanged)
+    """
+    ver = re.sub(r"[-.]?alpha[.-]?", "a", ver)
+    ver = re.sub(r"[-.]?beta[.-]?", "b", ver)
+    ver = re.sub(r"[-.]?rc[.-]?", "rc", ver)
+    return ver
+
+
 def _get_version() -> str:
     """Return a PEP 440-compliant version string.
 
@@ -38,11 +54,15 @@ def _get_version() -> str:
             raise RuntimeError(result.stderr)
 
         # git describe --tags --long  →  v1.2.3-N-ghash
+        # Use rsplit to split from the right, so tags containing
+        # hyphens (e.g. v1.6.0-beta.1) are handled correctly.
         desc = result.stdout.strip().lstrip("v")
-        m = re.match(r"^(.+)-(\d+)-g([0-9a-f]+)$", desc)
-        if not m:
+        parts = desc.rsplit("-", 2)
+        if len(parts) != 3 or not parts[2].startswith("g"):
             raise RuntimeError(f"Cannot parse git describe output: {desc!r}")
-        ver, distance, sha = m.group(1), m.group(2), m.group(3)
+
+        ver, distance, sha = parts[0], parts[1], parts[2][1:]  # strip 'g' prefix
+        ver = _normalize_prerelease(ver)
 
         if int(distance) == 0:
             return ver
