@@ -216,6 +216,16 @@ class GraphTransformerNet(nn.Module):
         """Return the number of trainable parameters."""
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"hidden_dim={self.hidden_dim}, "
+            f"num_gt_layers={len(self.gt_layers)}, "
+            f"num_tasks={self.num_tasks}, "
+            f"norm={self.norm_type}, "
+            f"params={self.num_parameters():,})"
+        )
+
     def _get_batch_index(self, batch: Union[Batch, Tensor]) -> Tensor:
         """
         Support both passing a `Batch` object or a batch index tensor.
