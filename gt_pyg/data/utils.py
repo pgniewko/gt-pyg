@@ -2,6 +2,8 @@
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
+logger = logging.getLogger(__name__)
+
 # Third-party
 import numpy as np
 import torch
@@ -76,7 +78,7 @@ def _canonicalize_mol(
                     atom.SetFormalCharge(0)
                     new_hcount = hcount - chg
                     if new_hcount < 0:
-                        logging.warning(
+                        logger.warning(
                             "Charge neutralization would set negative H count "
                             "(%d) on atom %d; clamping to 0",
                             new_hcount, at_idx,
@@ -88,7 +90,7 @@ def _canonicalize_mol(
         return mol
 
     except Exception as e:
-        logging.warning(f"Failed to canonicalize SMILES '{smiles}': {e}")
+        logger.warning(f"Failed to canonicalize SMILES '{smiles}': {e}")
         return None
 
 
@@ -309,7 +311,7 @@ def get_tensor_data(
         try:
             rdPartialCharges.ComputeGasteigerCharges(mol)
         except Exception as e:
-            logging.warning("Gasteiger charge computation failed for '%s': %s", smiles, e)
+            logger.warning("Gasteiger charge computation failed for '%s': %s", smiles, e)
 
         # Compute pharmacophore flags for entire molecule
         pharmacophore_flags = get_pharmacophore_flags(mol)
