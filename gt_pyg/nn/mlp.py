@@ -15,6 +15,8 @@ class MLP(nn.Module):
         dropout: float = 0.0,
         act: str = "gelu",
         act_kwargs: Optional[Dict[str, Any]] = None,
+        norm: bool = False,
+        residual: bool = False,
     ):
         """
         Multi-Layer Perceptron (MLP) module.
@@ -30,6 +32,11 @@ class MLP(nn.Module):
             act (str, optional): Activation function name. Default is "gelu".
             act_kwargs (Dict[str, Any], optional): Additional arguments for the
                 activation function. Default is None.
+            norm (bool, optional): If True, add LayerNorm after each hidden Linear
+                (before activation). Not applied to the output layer. Default is False.
+            residual (bool, optional): If True, add residual connections around
+                hidden blocks where input and output dimensions match. Not applied
+                to the output layer. Default is False.
         """
         super().__init__()
 
@@ -39,6 +46,8 @@ class MLP(nn.Module):
         self.act_kwargs = act_kwargs or {}
         self.num_hidden_layers = num_hidden_layers
         self.dropout_p = dropout
+        self.norm = norm
+        self.residual = residual
 
         if num_hidden_layers < 0:
             raise ValueError(f"num_hidden_layers must be >= 0, got {num_hidden_layers}")
@@ -53,12 +62,12 @@ class MLP(nn.Module):
                 f"must equal num_hidden_layers ({num_hidden_layers})"
             )
 
-        layers: List[nn.Module] = []
+        self.blocks = nn.ModuleList()
+        self._can_residual: List[bool] = []
 
         # Special case: no hidden layers -> just a single linear map
         if num_hidden_layers == 0:
-            layers.append(nn.Linear(input_dim, output_dim, bias=True))
-            self.mlp = nn.Sequential(*layers)
+            self.output_layer = nn.Linear(input_dim, output_dim, bias=True)
             self.reset_parameters()
             return
 
@@ -75,15 +84,18 @@ class MLP(nn.Module):
                 return activation_resolver(self.act, **self.act_kwargs)
 
         for i_dim, o_dim in zip(dims[:-1], dims[1:]):
-            layers.append(nn.Linear(i_dim, o_dim, bias=True))
-            layers.append(_make_activation())
+            block_layers: List[nn.Module] = []
+            block_layers.append(nn.Linear(i_dim, o_dim, bias=True))
+            if norm:
+                block_layers.append(nn.LayerNorm(o_dim))
+            block_layers.append(_make_activation())
             if dropout > 0.0:
-                layers.append(nn.Dropout(p=dropout))
+                block_layers.append(nn.Dropout(p=dropout))
+            self.blocks.append(nn.Sequential(*block_layers))
+            self._can_residual.append(i_dim == o_dim)
 
-        # Output layer (no activation, no dropout)
-        layers.append(nn.Linear(dims[-1], output_dim, bias=True))
-
-        self.mlp = nn.Sequential(*layers)
+        # Output layer (no activation, no dropout, no norm, no residual)
+        self.output_layer = nn.Linear(dims[-1], output_dim, bias=True)
 
         # Initialize parameters
         self.reset_parameters()
@@ -96,11 +108,15 @@ class MLP(nn.Module):
             * If activation is ReLU-like, use Kaiming uniform (fan_in).
             * Else, use Xavier uniform.
         - Output Linear layer uses Xavier uniform.
-        - All biases are set to zero.
+        - LayerNorm layers: weight=1, bias=0.
+        - All Linear biases are set to zero.
         """
-        linear_layers = [m for m in self.mlp if isinstance(m, nn.Linear)]
-        if not linear_layers:
-            return
+        # Collect all Linear layers across blocks and output
+        hidden_linears = []
+        for block in self.blocks:
+            for m in block:
+                if isinstance(m, nn.Linear):
+                    hidden_linears.append(m)
 
         act_lower = (self.act or "").lower()
 
@@ -116,8 +132,8 @@ class MLP(nn.Module):
 
         nonlinearity = "relu" if act_lower != "leaky_relu" else "leaky_relu"
 
-        # Initialize all but the last linear as "hidden"
-        for lin in linear_layers[:-1]:
+        # Initialize hidden linear layers
+        for lin in hidden_linears:
             if use_kaiming:
                 nn.init.kaiming_uniform_(
                     lin.weight,
@@ -130,10 +146,16 @@ class MLP(nn.Module):
                 nn.init.zeros_(lin.bias)
 
         # Initialize output layer with Xavier
-        out_lin = linear_layers[-1]
-        nn.init.xavier_uniform_(out_lin.weight)
-        if out_lin.bias is not None:
-            nn.init.zeros_(out_lin.bias)
+        nn.init.xavier_uniform_(self.output_layer.weight)
+        if self.output_layer.bias is not None:
+            nn.init.zeros_(self.output_layer.bias)
+
+        # Initialize LayerNorm layers
+        for block in self.blocks:
+            for m in block:
+                if isinstance(m, nn.LayerNorm):
+                    nn.init.ones_(m.weight)
+                    nn.init.zeros_(m.bias)
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -145,5 +167,9 @@ class MLP(nn.Module):
         Returns:
             Tensor: Output tensor of shape [..., output_dim].
         """
-        return self.mlp(x)
-
+        for i, block in enumerate(self.blocks):
+            if self.residual and self._can_residual[i]:
+                x = x + block(x)
+            else:
+                x = block(x)
+        return self.output_layer(x)
