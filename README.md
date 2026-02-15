@@ -86,9 +86,9 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 | Symbol | Description |
 |--------|-------------|
-| `GraphTransformerNet` | Full model with variational readout (`mu` + `log_var` heads) |
+| `GraphTransformerNet` | Full model with variational readout (`mu` + `log_var` heads), configurable head depth (`num_head_layers`), optional head LayerNorm (`head_norm`), and residual connections (`head_residual`) |
 | `GTConv` | Single Graph Transformer convolution layer |
-| `MLP` | Multi-layer perceptron used in readout heads |
+| `MLP` | Multi-layer perceptron with optional LayerNorm and residual connections |
 | `GraphTransformerNet.from_config(config)` | Construct a model from a config dict |
 
 ### Checkpointing & Utilities (`gt_pyg.nn`)
@@ -112,7 +112,7 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 | `get_gnm_encodings(adjacency)` | Kirchhoff pseudoinverse diagonal (GNM) |
 | `canonicalize_smiles(smiles)` | Canonical SMILES string |
 
-`GraphTransformerNet`, `GTConv`, `MLP`, and `get_tensor_data` are also available via the top-level `gt_pyg` import.
+`GraphTransformerNet`, `GTConv`, `MLP`, `get_tensor_data`, `get_atom_feature_dim`, and `get_bond_feature_dim` are also available via the top-level `gt_pyg` import.
 
 ---
 

@@ -56,6 +56,9 @@ class GraphTransformerNet(nn.Module):
         act: str = "gelu",
         dropout: float = 0.1,
         num_tasks: int = 1,
+        num_head_layers: int = 1,
+        head_norm: bool = False,
+        head_residual: bool = False,
     ) -> None:
         """Initialize the Graph Transformer network."""
         super().__init__()
@@ -80,6 +83,9 @@ class GraphTransformerNet(nn.Module):
             "act": act,
             "dropout": dropout,
             "num_tasks": num_tasks,
+            "num_head_layers": num_head_layers,
+            "head_norm": head_norm,
+            "head_residual": head_residual,
         }
 
         if num_tasks <= 0:
@@ -156,17 +162,21 @@ class GraphTransformerNet(nn.Module):
             input_dim=head_in_dim,
             output_dim=self.num_tasks,
             hidden_dims=head_hidden_dim,
-            num_hidden_layers=1,
+            num_hidden_layers=num_head_layers,
             dropout=dropout,
             act=act,
+            norm=head_norm,
+            residual=head_residual,
         )
         self.log_var_mlp = MLP(
             input_dim=head_in_dim,
             output_dim=self.num_tasks,
             hidden_dims=head_hidden_dim,
-            num_hidden_layers=1,
+            num_hidden_layers=num_head_layers,
             dropout=dropout,
             act=act,
+            norm=head_norm,
+            residual=head_residual,
         )
 
         # Initialize everything

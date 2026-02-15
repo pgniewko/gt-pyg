@@ -233,7 +233,7 @@ def test_transfer_learning(model, sample_input, tmp_path):
     loss.backward()
 
     # Verify gradients only on unfrozen params
-    assert model2.mu_mlp.mlp[0].weight.grad is not None
+    assert model2.mu_mlp.blocks[0][0].weight.grad is not None
     assert model2.node_emb.weight.grad is None
 
 
