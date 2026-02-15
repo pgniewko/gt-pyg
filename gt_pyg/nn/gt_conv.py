@@ -109,6 +109,14 @@ class GTConv(MessagePassing):
                 act=act,
             )
 
+            # Edge norm (pre-attention, mirrors norm1 for nodes)
+            if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
+                self.norm0e = nn.BatchNorm1d(edge_in_dim)
+            elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
+                self.norm0e = nn.LayerNorm(edge_in_dim)
+            else:
+                raise ValueError(f"Unknown norm type: {norm}")
+
             # Edge norm (pre-FFN, matching node path)
             if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
                 self.norm1e = nn.BatchNorm1d(edge_in_dim)
@@ -122,6 +130,7 @@ class GTConv(MessagePassing):
             self.WE_value = self.register_parameter("WE_value", None)
             self.WOe = self.register_parameter("WOe", None)
             self.ffn_e = self.register_parameter("ffn_e", None)
+            self.norm0e = self.register_parameter("norm0e", None)
             self.norm1e = self.register_parameter("norm1e", None)
 
         # Node norms (pre-attention and pre-FFN)
@@ -229,6 +238,14 @@ class GTConv(MessagePassing):
 
         # Edge norms
         if self.edge_in_dim is not None:
+            if isinstance(self.norm0e, nn.BatchNorm1d):
+                self.norm0e.reset_running_stats()
+                nn.init.ones_(self.norm0e.weight)
+                nn.init.zeros_(self.norm0e.bias)
+            elif isinstance(self.norm0e, nn.LayerNorm):
+                nn.init.ones_(self.norm0e.weight)
+                nn.init.zeros_(self.norm0e.bias)
+
             if isinstance(self.norm1e, nn.BatchNorm1d):
                 self.norm1e.reset_running_stats()
                 nn.init.ones_(self.norm1e.weight)
@@ -277,7 +294,8 @@ class GTConv(MessagePassing):
 
         # Pre-compute edge value projection for use in message() and edge update
         if self.edge_in_dim is not None and edge_attr is not None:
-            E_val = self.WE_value(edge_attr).view(-1, self.num_heads, self.head_dim)
+            edge_attr_norm = self.norm0e(edge_attr)
+            E_val = self.WE_value(edge_attr_norm).view(-1, self.num_heads, self.head_dim)
         else:
             E_val = None
 
