@@ -13,7 +13,6 @@ from rdkit.Chem.rdmolops import GetAdjacencyMatrix
 from torch_geometric.data import Data
 from tqdm.auto import tqdm
 
-# Local imports from refactored modules
 from .atom_features import (
     get_atom_features,
     get_pharmacophore_flags,

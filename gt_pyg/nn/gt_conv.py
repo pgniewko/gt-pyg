@@ -23,8 +23,8 @@ class GTConv(MessagePassing):
         gate: bool = False,
         qkv_bias: bool = False,
         dropout: float = 0.1,
-        norm: str = "ln",        # changed default to LN for transformer-like behavior
-        act: str = "gelu",       # changed default to GELU
+        norm: str = "ln",
+        act: str = "gelu",
         aggregators: Optional[List[str]] = None,
     ):
         """
@@ -109,7 +109,6 @@ class GTConv(MessagePassing):
                 act=act,
             )
 
-            # Edge norm (pre-attention, mirrors norm1 for nodes)
             if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
                 self.norm0e = nn.BatchNorm1d(edge_in_dim)
             elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
@@ -117,7 +116,7 @@ class GTConv(MessagePassing):
             else:
                 raise ValueError(f"Unknown norm type: {norm}")
 
-            # Edge norm (pre-FFN, matching node path)
+
             if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
                 self.norm1e = nn.BatchNorm1d(edge_in_dim)
             elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
@@ -335,7 +334,7 @@ class GTConv(MessagePassing):
             e1_norm = self.norm1e(e1)  # pre-norm before FFN
             e_ffn = self.ffn_e(e1_norm)
             e_ffn = self.dropout_layer(e_ffn)
-            edge_out = e1 + e_ffn  # residual, no trailing norm (matches node path)
+            edge_out = e1 + e_ffn
 
         return x_out, edge_out
 
