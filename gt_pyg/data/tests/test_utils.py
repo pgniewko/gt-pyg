@@ -2,9 +2,11 @@
 
 import pytest
 import torch
+from rdkit import Chem
+from rdkit.Chem import rdPartialCharges
 from torch_geometric.data import Batch
 
-from gt_pyg.data.utils import get_tensor_data
+from gt_pyg.data.utils import _mol_to_graph_tensors, get_tensor_data
 
 ETHANOL = "CCO"
 METHANE = "C"
@@ -148,3 +150,42 @@ class TestNoLabels:
 
     def test_empty_smiles_no_labels(self):
         assert get_tensor_data([]) == []
+
+
+# ---------------------------------------------------------------------------
+# _mol_to_graph_tensors
+# ---------------------------------------------------------------------------
+
+def _prepare_mol(smiles: str) -> Chem.Mol:
+    """Parse SMILES, assign stereo, compute Gasteiger charges."""
+    mol = Chem.MolFromSmiles(smiles)
+    Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
+    rdPartialCharges.ComputeGasteigerCharges(mol)
+    return mol
+
+
+class TestMolToGraphTensors:
+    """Tests for the private _mol_to_graph_tensors helper."""
+
+    def test_returns_correct_types(self):
+        mol = _prepare_mol(ETHANOL)
+        x, edge_index, edge_attr = _mol_to_graph_tensors(mol)
+        assert x.dtype == torch.float
+        assert edge_index.dtype == torch.long
+        assert edge_attr.dtype == torch.float
+
+    def test_shapes_consistent(self):
+        mol = _prepare_mol(ETHANOL)
+        x, edge_index, edge_attr = _mol_to_graph_tensors(mol)
+        n = mol.GetNumAtoms()
+        assert x.shape[0] == n
+        assert edge_index.shape[0] == 2
+        e = edge_index.shape[1]
+        assert edge_attr.shape[0] == e
+
+    def test_single_atom_molecule(self):
+        mol = _prepare_mol(METHANE)
+        x, edge_index, edge_attr = _mol_to_graph_tensors(mol)
+        assert x.shape[0] == 1
+        assert edge_index.shape == (2, 0)
+        assert edge_attr.shape[0] == 0

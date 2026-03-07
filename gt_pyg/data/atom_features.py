@@ -316,7 +316,7 @@ def get_atom_features(
     hydrogens_implicit: bool = True,
     atom_ring_stats: Optional[Dict[int, Dict[str, Any]]] = None,
     pharmacophore_flags: Optional[Dict[int, List[int]]] = None,
-    gnm_value: Optional[float] = None,
+    gnm_value: float = 0.0,
 ) -> np.ndarray:
     """Compute a 1D array of atom features from an RDKit atom.
 
@@ -336,8 +336,10 @@ def get_atom_features(
         - Pharmacophore flags (5 binary):
             - H-bond donor, H-bond acceptor, hydrophobic,
               positive ionizable, negative ionizable
+        - Scaled atomic mass (1 continuous):
+            - ``atom.GetMass() * 0.01``
         - GNM encoding (1 continuous):
-            - Kirchhoff pseudoinverse diagonal value (0.0 when GNM is disabled)
+            - Kirchhoff pseudoinverse diagonal value (0.0 by default)
 
     Args:
         atom (Chem.Atom): RDKit atom.
@@ -348,7 +350,7 @@ def get_atom_features(
         pharmacophore_flags (dict, optional): Precomputed pharmacophore flags from
             ``get_pharmacophore_flags(mol)``.
         gnm_value (float, optional): Kirchhoff pseudoinverse diagonal value for
-            this atom.  Defaults to ``0.0`` when ``None``.
+            this atom.  Defaults to ``0.0``.
 
     Returns:
         np.ndarray: Atom feature vector.
@@ -426,8 +428,11 @@ def get_atom_features(
         flags = [0, 0, 0, 0, 0]
     atom_feature_vector += flags
 
+    # Scaled atomic mass
+    atom_feature_vector += [atom.GetMass() * 0.01]
+
     # GNM encoding (Kirchhoff pseudoinverse diagonal)
-    atom_feature_vector += [gnm_value if gnm_value is not None else 0.0]
+    atom_feature_vector += [gnm_value]
 
     return np.array(atom_feature_vector)
 
@@ -440,8 +445,7 @@ def get_atom_feature_dim(
 
     Calculates the expected length of the feature vector based on the
     configuration options.  The GNM slot (Kirchhoff pseudoinverse
-    diagonal) is always present in the vector (as ``0.0`` when
-    ``gnm_value=None``).
+    diagonal) is always present in the vector (as ``0.0`` by default).
 
     Args:
         use_stereochemistry (bool, optional): Whether stereochemistry features are included.

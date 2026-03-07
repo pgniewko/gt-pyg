@@ -235,6 +235,82 @@ def get_gnm_encodings(adjacency: np.ndarray) -> np.ndarray:
     return np.diag(np.linalg.pinv(kirchhoff))
 
 
+def _mol_to_graph_tensors(
+    mol: Chem.Mol,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Convert an RDKit Mol into graph tensors (node features, edges, edge features).
+
+    The molecule should already have stereochemistry assigned and Gasteiger
+    charges computed before calling this function.
+
+    Always computes GNM encodings, falling back to zeros on failure.
+
+    Args:
+        mol (Chem.Mol): RDKit molecule (stereo assigned, Gasteiger charges computed).
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            - ``x`` (FloatTensor): Node features ``[N, F]``.
+            - ``edge_index`` (LongTensor): COO edges ``[2, E]``.
+            - ``edge_attr`` (FloatTensor): Edge features ``[E, D]``.
+    """
+    n = mol.GetNumAtoms()
+
+    # Pharmacophore flags for entire molecule
+    pharmacophore_flags = get_pharmacophore_flags(mol)
+
+    # Adjacency matrix (used by GNM and edge construction)
+    adjacency = np.array(GetAdjacencyMatrix(mol))
+
+    # GNM encodings with fallback to zeros on failure
+    try:
+        gnm_diag = get_gnm_encodings(adjacency)
+    except Exception:
+        logger.warning(
+            "GNM computation failed for molecule with %d atoms; using zeros", n,
+        )
+        gnm_diag = np.zeros(n, dtype=float)
+
+    # Ring membership stats
+    atom_ring_stats, bond_ring_stats = get_ring_membership_stats(mol)
+
+    # Node features
+    x_feat = []
+    for atom in mol.GetAtoms():
+        idx = atom.GetIdx()
+        atom_feats = get_atom_features(
+            atom,
+            use_stereochemistry=True,
+            hydrogens_implicit=True,
+            atom_ring_stats=atom_ring_stats,
+            pharmacophore_flags=pharmacophore_flags,
+            gnm_value=gnm_diag[idx],
+        )
+        x_feat.append(atom_feats.tolist())
+    x = torch.as_tensor(np.asarray(x_feat), dtype=torch.float)
+
+    # Edges
+    rows, cols = np.nonzero(adjacency)
+    torch_rows = torch.from_numpy(rows.astype(np.int64)).to(torch.long)
+    torch_cols = torch.from_numpy(cols.astype(np.int64)).to(torch.long)
+    edge_index = torch.stack([torch_rows, torch_cols], dim=0)
+
+    # Edge attributes
+    edge_attr_feat = []
+    for i, j in zip(rows, cols):
+        bond = mol.GetBondBetweenAtoms(int(i), int(j))
+        edge_attr_feat.append(
+            get_bond_features(
+                bond,
+                use_stereochemistry=True,
+                bond_ring_stats=bond_ring_stats,
+            )
+        )
+    edge_attr = torch.as_tensor(np.asarray(edge_attr_feat), dtype=torch.float)
+
+    return x, edge_index, edge_attr
+
+
 def _to_float_sequence(
     y_val: Union[float, int, Sequence[Optional[float]], np.ndarray]
 ) -> np.ndarray:
@@ -260,7 +336,6 @@ def _to_float_sequence(
 def get_tensor_data(
     x_smiles: List[str],
     y: Optional[List[Union[float, int, Sequence[Optional[float]], np.ndarray]]] = None,
-    gnm: bool = True,
 ) -> List[Data]:
     """Build torch_geometric molecular graphs with optional labels and masks.
 
@@ -276,9 +351,6 @@ def get_tensor_data(
         y (Optional[List[...]]): Per-sample labels: single float/int
             (single-task) or a sequence/array (multi-task).  ``None`` to
             build graphs without labels (inference).
-        gnm (bool, optional): If True, compute the GNM (Kirchhoff pseudoinverse
-            diagonal) and populate the corresponding node feature.  When False
-            the feature is left at ``0.0``.  Defaults to ``True``.
 
     Returns:
         List[Data]: One ``Data`` per sample with fields:
@@ -312,51 +384,8 @@ def get_tensor_data(
         except Exception as e:
             logger.warning("Gasteiger charge computation failed for '%s': %s", smiles, e)
 
-        # Compute pharmacophore flags for entire molecule
-        pharmacophore_flags = get_pharmacophore_flags(mol)
-
-        # Compute adjacency matrix once (used by GNM and edge_index)
-        adjacency = np.array(GetAdjacencyMatrix(mol))
-
-        # Optional GNM-style node augmentation
-        gnm_diag = get_gnm_encodings(adjacency) if gnm else None
-
-        # Precompute ring membership stats
-        atom_ring_stats, bond_ring_stats = get_ring_membership_stats(mol)
-
-        # Node features
-        x_feat = []
-        for atom in mol.GetAtoms():
-            idx = atom.GetIdx()
-            atom_feats = get_atom_features(
-                atom,
-                use_stereochemistry=True,
-                hydrogens_implicit=True,
-                atom_ring_stats=atom_ring_stats,
-                pharmacophore_flags=pharmacophore_flags,
-                gnm_value=gnm_diag[idx] if gnm_diag is not None else None,
-            )
-            x_feat.append(atom_feats.tolist())
-        x = torch.as_tensor(np.asarray(x_feat), dtype=torch.float)
-
-        # Edges
-        rows, cols = np.nonzero(adjacency)
-        torch_rows = torch.from_numpy(rows.astype(np.int64)).to(torch.long)
-        torch_cols = torch.from_numpy(cols.astype(np.int64)).to(torch.long)
-        edge_index = torch.stack([torch_rows, torch_cols], dim=0)
-
-        # Edge attributes
-        edge_attr_feat = []
-        for i, j in zip(rows, cols):
-            bond = mol.GetBondBetweenAtoms(int(i), int(j))
-            edge_attr_feat.append(
-                get_bond_features(
-                    bond,
-                    use_stereochemistry=True,
-                    bond_ring_stats=bond_ring_stats,
-                )
-            )
-        edge_attr = torch.as_tensor(np.asarray(edge_attr_feat), dtype=torch.float)
+        # Extract graph tensors (node features, edges, edge attributes)
+        x, edge_index, edge_attr = _mol_to_graph_tensors(mol)
 
         # Build Data object
         data = Data(

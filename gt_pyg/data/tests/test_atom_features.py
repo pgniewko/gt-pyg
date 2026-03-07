@@ -135,9 +135,20 @@ class TestGetAtomFeatures:
         # GNM is the last element
         assert feat[-1] == pytest.approx(0.42)
 
-    def test_gnm_none_defaults_to_zero(self, ethanol_mol):
-        feat = get_atom_features(ethanol_mol.GetAtomWithIdx(0), gnm_value=None)
+    def test_gnm_defaults_to_zero(self, ethanol_mol):
+        feat = get_atom_features(ethanol_mol.GetAtomWithIdx(0))
         assert feat[-1] == 0.0
+
+    def test_mass_feature_present(self, ethanol_mol):
+        feat = get_atom_features(ethanol_mol.GetAtomWithIdx(0))
+        # Scaled mass is second-to-last (before GNM)
+        assert feat[-2] > 0.0
+
+    def test_mass_feature_scaled(self, ethanol_mol):
+        atom = ethanol_mol.GetAtomWithIdx(0)  # Carbon
+        feat = get_atom_features(atom)
+        # Scaled mass is second-to-last (before GNM)
+        assert feat[-2] == pytest.approx(atom.GetMass() * 0.01)
 
 
 # ---------------------------------------------------------------------------
