@@ -60,6 +60,7 @@ setup(
     ],
     extras_require={
         "dev": ["pytest>=7.0"],
+        "chembl": ["chembl_structure_pipeline"],
         "examples": [
             "notebook",
             "ipykernel",
@@ -72,6 +73,7 @@ setup(
         ],
         "all": [
             "gt_pyg[dev]",
+            "gt_pyg[chembl]",
             "gt_pyg[examples]",
         ],
     },

@@ -24,6 +24,55 @@ from .bond_features import (
 
 
 
+def _check_chembl_pipeline() -> None:
+    """Raise ImportError if chembl_structure_pipeline is not installed."""
+    try:
+        import chembl_structure_pipeline  # noqa: F401
+    except ImportError:
+        raise ImportError(
+            "chembl_structure_pipeline is required for SMILES standardization. "
+            "Install it with: pip install gt_pyg[chembl]"
+        )
+
+
+def standardize_smiles(smiles: str) -> Optional[str]:
+    """Standardize a SMILES string using the ChEMBL structure pipeline.
+
+    Applies ``standardize_mol`` (normalization, charge cleanup) followed by
+    ``get_parent_mol`` (salt/counterion stripping) and returns a canonical
+    SMILES string.
+
+    Requires ``chembl_structure_pipeline`` to be installed
+    (``pip install gt_pyg[chembl]``).
+
+    Args:
+        smiles (str): Input SMILES string.
+
+    Returns:
+        Optional[str]: Standardized canonical SMILES, or ``None`` on failure.
+
+    Raises:
+        ImportError: If ``chembl_structure_pipeline`` is not installed.
+    """
+    _check_chembl_pipeline()
+    from chembl_structure_pipeline import standardize_mol, get_parent_mol
+
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return None
+        std_mol = standardize_mol(mol)
+        if std_mol is None:
+            return None
+        parent_mol, _ = get_parent_mol(std_mol)
+        if parent_mol is None:
+            return None
+        return Chem.MolToSmiles(parent_mol, canonical=True)
+    except Exception as e:
+        logger.warning("ChEMBL standardization failed for '%s': %s", smiles, e)
+        return None
+
+
 def _canonicalize_mol(
     smiles: str,
     keep_stereo: bool = True,
@@ -336,6 +385,7 @@ def _to_float_sequence(
 def get_tensor_data(
     x_smiles: List[str],
     y: Optional[List[Union[float, int, Sequence[Optional[float]], np.ndarray]]] = None,
+    standardize: bool = False,
 ) -> List[Data]:
     """Build torch_geometric molecular graphs with optional labels and masks.
 
@@ -351,6 +401,10 @@ def get_tensor_data(
         y (Optional[List[...]]): Per-sample labels: single float/int
             (single-task) or a sequence/array (multi-task).  ``None`` to
             build graphs without labels (inference).
+        standardize (bool, optional): If ``True``, apply ChEMBL structure
+            pipeline standardization before canonicalization.  Requires
+            ``chembl_structure_pipeline`` (``pip install gt_pyg[chembl]``).
+            Defaults to ``False``.
 
     Returns:
         List[Data]: One ``Data`` per sample with fields:
@@ -359,7 +413,13 @@ def get_tensor_data(
             - ``edge_attr`` (torch.FloatTensor): Edge features ``[E, D]``.
             - ``y`` (torch.FloatTensor): Task targets ``[1, T]`` *(only when y is provided)*.
             - ``y_mask`` (torch.FloatTensor): Mask ``[1, T]`` *(only when y is provided)*.
+
+    Raises:
+        ImportError: If ``standardize=True`` and ``chembl_structure_pipeline``
+            is not installed.
     """
+    if standardize:
+        _check_chembl_pipeline()
     has_labels = y is not None
 
     if has_labels and len(x_smiles) != len(y):
@@ -372,6 +432,12 @@ def get_tensor_data(
     y_iter = y if has_labels else [None] * len(x_smiles)
 
     for smiles, y_val in tqdm(zip(x_smiles, y_iter), total=len(x_smiles), desc="Processing data"):
+        # Optional ChEMBL standardization pre-step
+        if standardize:
+            std_smi = standardize_smiles(smiles)
+            if std_smi is not None:
+                smiles = std_smi
+
         # Parse and canonicalize SMILES (single parse)
         mol = _canonicalize_mol(smiles)
         if mol is None:
