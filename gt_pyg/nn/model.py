@@ -59,6 +59,7 @@ class GraphTransformerNet(nn.Module):
         num_head_layers: int = 1,
         head_norm: bool = False,
         head_residual: bool = False,
+        head_dropout: Optional[float] = None,
     ) -> None:
         """Initialize the Graph Transformer network."""
         super().__init__()
@@ -67,6 +68,9 @@ class GraphTransformerNet(nn.Module):
             gt_aggregators = ["sum"]
         if aggregators is None:
             aggregators = ["sum"]
+
+        # Resolve head_dropout: fall back to encoder dropout if not specified
+        resolved_head_dropout = head_dropout if head_dropout is not None else dropout
 
         # Store config for checkpointing
         self._config = {
@@ -86,6 +90,7 @@ class GraphTransformerNet(nn.Module):
             "num_head_layers": num_head_layers,
             "head_norm": head_norm,
             "head_residual": head_residual,
+            "head_dropout": head_dropout,
         }
 
         if num_tasks <= 0:
@@ -153,7 +158,7 @@ class GraphTransformerNet(nn.Module):
         else:
             raise ValueError(f"Unknown norm type: {norm}")
 
-        self.readout_dropout = nn.Dropout(p=dropout)
+        self.readout_dropout = nn.Dropout(p=resolved_head_dropout)
 
         # Slightly stronger heads (still modest by default)
         head_hidden_dim = hidden_dim
@@ -163,7 +168,7 @@ class GraphTransformerNet(nn.Module):
             output_dim=self.num_tasks,
             hidden_dims=head_hidden_dim,
             num_hidden_layers=num_head_layers,
-            dropout=dropout,
+            dropout=resolved_head_dropout,
             act=act,
             norm=head_norm,
             residual=head_residual,
@@ -173,7 +178,7 @@ class GraphTransformerNet(nn.Module):
             output_dim=self.num_tasks,
             hidden_dims=head_hidden_dim,
             num_hidden_layers=num_head_layers,
-            dropout=dropout,
+            dropout=resolved_head_dropout,
             act=act,
             norm=head_norm,
             residual=head_residual,
