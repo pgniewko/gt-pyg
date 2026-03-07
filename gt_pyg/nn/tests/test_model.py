@@ -295,3 +295,45 @@ def test_checkpoint_info_includes_version(model, tmp_path):
     info = get_checkpoint_info(path)
     assert "gt_pyg_version" in info
     assert info["gt_pyg_version"] == gt_pyg.__version__
+
+
+# ---- Head Dropout Tests ----
+
+def test_head_dropout_defaults_to_encoder_dropout():
+    """When head_dropout is None, heads use the encoder dropout rate."""
+    m = GraphTransformerNet(
+        node_dim_in=16, edge_dim_in=8, hidden_dim=32,
+        num_gt_layers=2, num_heads=4, dropout=0.1, norm="bn",
+    )
+    assert m.readout_dropout.p == 0.1
+    assert m.mu_mlp.dropout_p == 0.1
+    assert m.log_var_mlp.dropout_p == 0.1
+
+
+def test_head_dropout_separate_from_encoder():
+    """When head_dropout is set, heads use it while encoder uses dropout."""
+    m = GraphTransformerNet(
+        node_dim_in=16, edge_dim_in=8, hidden_dim=32,
+        num_gt_layers=2, num_heads=4, dropout=0.1, head_dropout=0.4, norm="bn",
+    )
+    # Encoder layers should use encoder dropout
+    assert m.input_dropout.p == 0.1
+
+    # Heads should use head_dropout
+    assert m.readout_dropout.p == 0.4
+    assert m.mu_mlp.dropout_p == 0.4
+    assert m.log_var_mlp.dropout_p == 0.4
+
+
+def test_head_dropout_saved_in_config():
+    """head_dropout is persisted in get_config for checkpoint reconstruction."""
+    m = GraphTransformerNet(
+        node_dim_in=16, edge_dim_in=8, hidden_dim=32,
+        num_gt_layers=2, num_heads=4, dropout=0.1, head_dropout=0.3, norm="bn",
+    )
+    config = m.get_config()
+    assert config["head_dropout"] == 0.3
+
+    m2 = GraphTransformerNet.from_config(config)
+    assert m2.readout_dropout.p == 0.3
+    assert m2.mu_mlp.dropout_p == 0.3
