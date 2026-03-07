@@ -3,6 +3,7 @@
 import unittest.mock
 
 import pytest
+import torch
 
 from gt_pyg.data.utils import standardize_smiles, get_tensor_data
 
@@ -22,10 +23,6 @@ needs_chembl = pytest.mark.skipif(
     reason="chembl_structure_pipeline not installed",
 )
 
-
-# ---------------------------------------------------------------------------
-# standardize_smiles
-# ---------------------------------------------------------------------------
 
 class TestStandardizeSmiles:
 
@@ -60,10 +57,6 @@ class TestStandardizeSmiles:
                 standardize_smiles("CCO")
 
 
-# ---------------------------------------------------------------------------
-# get_tensor_data with standardize flag
-# ---------------------------------------------------------------------------
-
 class TestGetTensorDataStandardize:
 
     @needs_chembl
@@ -77,8 +70,11 @@ class TestGetTensorDataStandardize:
         # With standardize, salt is stripped before featurization
         data_std = get_tensor_data(["c1ccccc1.Cl"], standardize=True)
         data_plain = get_tensor_data(["c1ccccc1"], standardize=False)
-        # After salt stripping, atom count should match plain benzene
+        # After salt stripping, tensors should match plain benzene
         assert data_std[0].x.shape[0] == data_plain[0].x.shape[0]
+        assert torch.equal(data_std[0].x, data_plain[0].x)
+        assert torch.equal(data_std[0].edge_index, data_plain[0].edge_index)
+        assert torch.equal(data_std[0].edge_attr, data_plain[0].edge_attr)
 
     def test_standardize_raises_without_chembl(self):
         with unittest.mock.patch.dict("sys.modules", {"chembl_structure_pipeline": None}):
