@@ -297,8 +297,6 @@ def test_checkpoint_info_includes_version(model, tmp_path):
     assert info["gt_pyg_version"] == gt_pyg.__version__
 
 
-# ---- Head Dropout Tests ----
-
 def test_head_dropout_defaults_to_encoder_dropout():
     """When head_dropout is None, heads use the encoder dropout rate."""
     m = GraphTransformerNet(
