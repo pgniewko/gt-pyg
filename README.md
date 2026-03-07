@@ -29,7 +29,12 @@ To run the example notebooks, install with the `examples` extra:
 pip install -e ".[examples]"
 ```
 
-To install everything (dev + examples):
+To enable [ChEMBL structure pipeline](https://github.com/chembl/ChEMBL_Structure_Pipeline) standardization:
+```bash
+pip install -e ".[chembl]"
+```
+
+To install everything (dev + chembl + examples):
 ```bash
 pip install -e ".[all]"
 ```
@@ -86,7 +91,7 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 | Symbol | Description |
 |--------|-------------|
-| `GraphTransformerNet` | Full model with variational readout (`mu` + `log_var` heads), configurable head depth (`num_head_layers`), optional head LayerNorm (`head_norm`), and residual connections (`head_residual`) |
+| `GraphTransformerNet` | Full model with variational readout (`mu` + `log_var` heads), configurable head depth (`num_head_layers`), optional head LayerNorm (`head_norm`), residual connections (`head_residual`), and separate `head_dropout` rate |
 | `GTConv` | Single Graph Transformer convolution layer |
 | `MLP` | Multi-layer perceptron with optional LayerNorm and residual connections |
 | `GraphTransformerNet.from_config(config)` | Construct a model from a config dict |
@@ -106,11 +111,12 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 | Symbol | Description |
 |--------|-------------|
-| `get_tensor_data(x_smiles, y)` | SMILES + labels to list of PyG `Data` objects |
+| `get_tensor_data(x_smiles, y, standardize)` | SMILES + labels to list of PyG `Data` objects (optional ChEMBL standardization) |
 | `get_atom_feature_dim()` | Dimensionality of the atom feature vector |
 | `get_bond_feature_dim()` | Dimensionality of the bond feature vector |
 | `get_gnm_encodings(adjacency)` | Kirchhoff pseudoinverse diagonal (GNM) |
 | `canonicalize_smiles(smiles)` | Canonical SMILES string |
+| `standardize_smiles(smiles)` | Standardize via ChEMBL structure pipeline (requires `pip install gt_pyg[chembl]`) |
 
 `GraphTransformerNet`, `GTConv`, `MLP`, `get_tensor_data`, `get_atom_feature_dim`, and `get_bond_feature_dim` are also available via the top-level `gt_pyg` import.
 
