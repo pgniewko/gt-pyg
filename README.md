@@ -137,6 +137,35 @@ pytest gt_pyg/ -v
 
 ---
 
+## OpenADMET Benchmarks
+
+The `examples/` directory contains training and evaluation notebooks for the
+[OpenADMET](https://openadmet.ai/) benchmark.
+
+### Single-task models (`v1.6.0`)
+
+One `GraphTransformerNet` is trained per endpoint (a single model, not an
+ensemble).  Training notebooks:
+
+- [`train_logd.ipynb`](examples/train_logd.ipynb) — LogD
+- [`train_ksol.ipynb`](examples/train_ksol.ipynb) — KSOL (solubility, trained on `LogS = log10((KSOL + 1) * 1e-6)`)
+
+### Ensemble model — beardy-polonium (`v1.3.0`)
+
+The beardy-polonium submission is an **ensemble of 9 multi-task models** that
+predicts all OpenADMET endpoints simultaneously.  The submission file is
+stored in `examples/data/submissions/beardy-polonium-submission.csv`.
+
+### Comparison
+
+[`compare_predictions.ipynb`](examples/compare_predictions.ipynb) evaluates
+the single-task models against the beardy-polonium ensemble on LogD and
+log-transformed KSOL.  Metrics (MAE, RAE, R², Spearman R, Kendall's Tau) are
+reported on the full test set, the leaderboard (public) subset, and the
+private subset, with bootstrap confidence intervals and significance tests.
+
+---
+
 ## REFERENCES
 
 1. [A Generalization of Transformer Networks to Graphs](https://arxiv.org/abs/2012.09699)
