@@ -152,10 +152,6 @@ class TestNoLabels:
         assert get_tensor_data([]) == []
 
 
-# ---------------------------------------------------------------------------
-# _mol_to_graph_tensors
-# ---------------------------------------------------------------------------
-
 def _prepare_mol(smiles: str) -> Chem.Mol:
     """Parse SMILES, assign stereo, compute Gasteiger charges."""
     mol = Chem.MolFromSmiles(smiles)

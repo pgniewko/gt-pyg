@@ -243,8 +243,6 @@ def _mol_to_graph_tensors(
     The molecule should already have stereochemistry assigned and Gasteiger
     charges computed before calling this function.
 
-    Always computes GNM encodings, falling back to zeros on failure.
-
     Args:
         mol (Chem.Mol): RDKit molecule (stereo assigned, Gasteiger charges computed).
 
