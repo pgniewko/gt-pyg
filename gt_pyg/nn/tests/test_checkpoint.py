@@ -198,3 +198,43 @@ class TestLoadCheckpointWarnings:
             load_checkpoint(tmp_path / "ckpt.pt")
 
         assert not any("gt-pyg" in msg.lower() or "gt_pyg_version" in msg for msg in caplog.messages)
+
+    def test_error_on_version_mismatch(self, model, tmp_path):
+        save_checkpoint(model, tmp_path / "ckpt.pt")
+
+        raw = torch.load(tmp_path / "ckpt.pt", map_location="cpu", weights_only=False)
+        raw["gt_pyg_version"] = "0.0.0"
+        torch.save(raw, tmp_path / "ckpt.pt")
+
+        with pytest.raises(RuntimeError, match="was saved with gt-pyg 0.0.0"):
+            load_checkpoint(tmp_path / "ckpt.pt", version_check="error")
+
+    def test_error_on_missing_version(self, model, tmp_path):
+        save_checkpoint(model, tmp_path / "ckpt.pt")
+
+        raw = torch.load(tmp_path / "ckpt.pt", map_location="cpu", weights_only=False)
+        del raw["gt_pyg_version"]
+        torch.save(raw, tmp_path / "ckpt.pt")
+
+        with pytest.raises(RuntimeError, match="no gt_pyg_version field"):
+            load_checkpoint(tmp_path / "ckpt.pt", version_check="error")
+
+    def test_ignore_skips_version_check(self, model, tmp_path, caplog):
+        import logging
+
+        save_checkpoint(model, tmp_path / "ckpt.pt")
+
+        raw = torch.load(tmp_path / "ckpt.pt", map_location="cpu", weights_only=False)
+        raw["gt_pyg_version"] = "0.0.0"
+        torch.save(raw, tmp_path / "ckpt.pt")
+
+        with caplog.at_level(logging.WARNING, logger="gt_pyg.nn.checkpoint"):
+            load_checkpoint(tmp_path / "ckpt.pt", version_check="ignore")
+
+        assert not any("gt-pyg" in msg.lower() or "gt_pyg_version" in msg for msg in caplog.messages)
+
+    def test_invalid_version_check_raises(self, model, tmp_path):
+        save_checkpoint(model, tmp_path / "ckpt.pt")
+
+        with pytest.raises(ValueError, match="version_check must be"):
+            load_checkpoint(tmp_path / "ckpt.pt", version_check="invalid")

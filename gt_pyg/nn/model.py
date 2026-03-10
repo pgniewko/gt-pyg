@@ -502,6 +502,7 @@ class GraphTransformerNet(nn.Module):
         path: Union[str, Path],
         map_location: Optional[Union[str, torch.device]] = None,
         strict: bool = True,
+        version_check: str = "warn",
     ) -> Tuple["GraphTransformerNet", Dict[str, Any]]:
         """
         Load model from checkpoint.
@@ -510,13 +511,18 @@ class GraphTransformerNet(nn.Module):
             path: Checkpoint file path.
             map_location: Device mapping (e.g., "cpu", "cuda:0").
             strict: Enforce state_dict key matching.
+            version_check: How to handle gt-pyg version mismatches.
+                ``"warn"`` (default) logs a warning, ``"error"`` raises
+                :class:`RuntimeError`, ``"ignore"`` skips the check.
 
         Returns:
             Tuple of (model, checkpoint_dict).
         """
         from .checkpoint import load_checkpoint
 
-        checkpoint = load_checkpoint(path, map_location=map_location)
+        checkpoint = load_checkpoint(
+            path, map_location=map_location, version_check=version_check,
+        )
         model = cls.from_config(checkpoint["model_config"])
         model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
         return model, checkpoint
@@ -526,6 +532,7 @@ class GraphTransformerNet(nn.Module):
         path: Union[str, Path],
         map_location: Optional[Union[str, torch.device]] = None,
         strict: bool = True,
+        version_check: str = "warn",
     ) -> None:
         """
         Load weights from checkpoint into this model instance.
@@ -534,18 +541,25 @@ class GraphTransformerNet(nn.Module):
             path: Checkpoint file path.
             map_location: Device mapping.
             strict: Enforce state_dict key matching (set False for transfer learning).
+            version_check: How to handle gt-pyg version mismatches.
+                ``"warn"`` (default) logs a warning, ``"error"`` raises
+                :class:`RuntimeError`, ``"ignore"`` skips the check.
         """
         from .checkpoint import load_checkpoint
 
-        checkpoint = load_checkpoint(path, map_location=map_location)
+        checkpoint = load_checkpoint(
+            path, map_location=map_location, version_check=version_check,
+        )
 
         if "model_config" in checkpoint:
             saved_config = checkpoint["model_config"]
             current_config = self.get_config()
             if saved_config != current_config:
                 logger.warning(
-                    f"Architecture mismatch between checkpoint and model. "
-                    f"Saved: {saved_config}, Current: {current_config}"
+                    "Architecture mismatch between checkpoint and model. "
+                    "Saved: %s, Current: %s",
+                    saved_config,
+                    current_config,
                 )
 
         self.load_state_dict(checkpoint["model_state_dict"], strict=strict)
