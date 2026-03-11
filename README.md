@@ -156,6 +156,14 @@ ensemble).  Training notebooks:
 - [`train_logd.ipynb`](examples/train_logd.ipynb) — LogD
 - [`train_ksol.ipynb`](examples/train_ksol.ipynb) — KSOL (solubility, trained on `LogS = log10((KSOL + 1) * 1e-6)`)
 
+### Fine-tuned single-task models (`v1.6.1`)
+
+Same architecture as above, but initialized from a pretrained backbone
+checkpoint (head weights are reinitialized).  Training notebooks:
+
+- [`train_logd_finetune.ipynb`](examples/train_logd_finetune.ipynb) — LogD
+- [`train_ksol_finetune.ipynb`](examples/train_ksol_finetune.ipynb) — KSOL (solubility)
+
 ### Ensemble model — beardy-polonium (`v1.3.0`)
 
 The beardy-polonium submission is an **ensemble of 9 multi-task models** that
