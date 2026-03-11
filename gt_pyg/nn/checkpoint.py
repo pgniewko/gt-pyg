@@ -73,6 +73,7 @@ def save_checkpoint(
 def load_checkpoint(
     path: Union[str, Path],
     map_location: Optional[Union[str, torch.device]] = None,
+    version_check: str = "warn",
 ) -> Dict[str, Any]:
     """
     Load checkpoint from disk.
@@ -80,30 +81,47 @@ def load_checkpoint(
     Args:
         path: Checkpoint file path.
         map_location: Device mapping.
+        version_check: How to handle gt-pyg version mismatches.
+            ``"warn"`` (default) logs a warning, ``"error"`` raises
+            :class:`RuntimeError`, ``"ignore"`` skips the check.
 
     Returns:
         Checkpoint dict with state_dict, config, etc.
+
+    Raises:
+        RuntimeError: If ``version_check="error"`` and the checkpoint was
+            saved with a different gt-pyg version.
     """
+    if version_check not in ("warn", "error", "ignore"):
+        raise ValueError(
+            f"version_check must be 'warn', 'error', or 'ignore', "
+            f"got {version_check!r}"
+        )
+
     # NOTE: weights_only=False is intentional — checkpoints store non-tensor
     # metadata (config dicts, version strings, etc.).  Only load files you trust.
     checkpoint = torch.load(path, map_location=map_location, weights_only=False)
 
-    saved_version = checkpoint.get("gt_pyg_version")
-    if saved_version is None:
-        logger.warning(
-            "Checkpoint '%s' has no gt_pyg_version field; "
-            "it may have been created with an older version of gt-pyg.",
-            path,
-        )
-    elif saved_version != __version__:
-        logger.warning(
-            "Checkpoint '%s' was saved with gt-pyg %s, "
-            "but the current version is %s. "
-            "Behaviour may differ.",
-            path,
-            saved_version,
-            __version__,
-        )
+    if version_check != "ignore":
+        saved_version = checkpoint.get("gt_pyg_version")
+        if saved_version is None:
+            msg = (
+                f"Checkpoint '{path}' has no gt_pyg_version field; "
+                f"it may have been created with an older version of gt-pyg."
+            )
+            if version_check == "error":
+                raise RuntimeError(msg)
+            logger.warning(msg)
+        elif saved_version != __version__:
+            msg = (
+                f"Checkpoint '{path}' was saved with gt-pyg {saved_version}, "
+                f"but the current version is {__version__}. "
+                f"Model architecture (feature dimensions, layer structure) may "
+                f"have changed between versions — weights may be incompatible."
+            )
+            if version_check == "error":
+                raise RuntimeError(msg)
+            logger.warning(msg)
 
     return checkpoint
 
