@@ -159,7 +159,9 @@ ensemble).  Training notebooks:
 ### Fine-tuned single-task models (`v1.6.1`)
 
 Same architecture as above, but initialized from a pretrained backbone
-checkpoint (head weights are reinitialized).  Training notebooks:
+checkpoint (head weights are reinitialized).  The pretrained checkpoint is
+produced by the [golem](https://github.com/pgniewko/golem) repository and
+should be placed at `examples/pretrained/checkpoint.pt`.  Training notebooks:
 
 - [`train_logd_finetune.ipynb`](examples/train_logd_finetune.ipynb) — LogD
 - [`train_ksol_finetune.ipynb`](examples/train_ksol_finetune.ipynb) — KSOL (solubility)
