@@ -146,7 +146,7 @@ pytest gt_pyg/ -v
 ## OpenADMET Benchmarks
 
 The `examples/` directory contains training and evaluation notebooks for the
-[OpenADMET](https://openadmet.ai/) benchmark.
+[OpenADMET](https://openadmet.ghost.io/openadmet-expansionrx-blind-challenge/) benchmark.
 
 ### Single-task models (`v1.6.0`)
 
