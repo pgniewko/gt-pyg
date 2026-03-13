@@ -43,7 +43,7 @@ def _get_version_from_git():
         return f"{ver}.dev{distance}+{sha}"
 
     except Exception:
-        return "unknown"
+        return "0+unknown"
 
 
 setup(
