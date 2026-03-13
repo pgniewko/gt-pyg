@@ -156,7 +156,7 @@ ensemble).  Training notebooks:
 - [`train_logd.ipynb`](examples/train_logd.ipynb) — LogD
 - [`train_ksol.ipynb`](examples/train_ksol.ipynb) — KSOL (solubility, trained on `LogS = log10((KSOL + 1) * 1e-6)`)
 
-### Fine-tuned single-task models (`v1.6.1`)
+### Fine-tuned single-task models (`v1.6.1b`)
 
 Same architecture as above, but initialized from a pretrained backbone
 checkpoint (head weights are reinitialized).  The pretrained checkpoint is
@@ -175,10 +175,11 @@ stored in `examples/data/submissions/beardy-polonium-submission.csv`.
 ### Comparison
 
 [`compare_predictions.ipynb`](examples/compare_predictions.ipynb) evaluates
-the single-task models against the beardy-polonium ensemble on LogD and
-log-transformed KSOL.  Metrics (MAE, RAE, R², Spearman R, Kendall's Tau) are
-reported on the full test set, the leaderboard (public) subset, and the
-private subset, with bootstrap confidence intervals and significance tests.
+the `v1.6.0` single-task models and `v1.6.1b` fine-tuned models against the
+beardy-polonium ensemble on LogD and log-transformed KSOL. Metrics (MAE, RAE,
+R², Spearman R, Kendall's Tau) are reported on the full test set, the
+leaderboard (public) subset, and the private subset, with bootstrap
+confidence intervals and significance tests.
 
 ---
 
