@@ -1,11 +1,13 @@
 """Tests for GraphTransformerNet freeze/unfreeze and checkpoint functionality."""
 
 import logging
+import importlib.metadata
 
 import pytest
 import torch
 
 import gt_pyg
+import gt_pyg._version as version_mod
 from gt_pyg.nn import GraphTransformerNet, get_checkpoint_info, load_checkpoint
 
 
@@ -243,6 +245,31 @@ def test_version_is_defined():
     """gt_pyg.__version__ is a non-empty string."""
     assert isinstance(gt_pyg.__version__, str)
     assert gt_pyg.__version__ != ""
+
+
+def test_version_prefers_git_in_source_checkout(monkeypatch):
+    """Source checkouts should use git instead of potentially stale metadata."""
+
+    def fake_git_version():
+        return "1.2.3.dev4+abc1234"
+
+    def fail_metadata(_name):
+        raise AssertionError("metadata lookup should not be used in a git checkout")
+
+    monkeypatch.setattr(version_mod, "_get_version_from_git", fake_git_version)
+    monkeypatch.setattr(importlib.metadata, "version", fail_metadata)
+    monkeypatch.setattr(version_mod.os.path, "isdir", lambda path: path.endswith(".git"))
+
+    assert version_mod._get_version() == "1.2.3.dev4+abc1234"
+
+
+def test_version_falls_back_to_metadata_outside_git(monkeypatch):
+    """Installed packages without git metadata should use importlib.metadata."""
+
+    monkeypatch.setattr(version_mod.os.path, "isdir", lambda path: False)
+    monkeypatch.setattr(importlib.metadata, "version", lambda _name: "9.9.9")
+
+    assert version_mod._get_version() == "9.9.9"
 
 
 def test_checkpoint_saves_version(model, tmp_path):
