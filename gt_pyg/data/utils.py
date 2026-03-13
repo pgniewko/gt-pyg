@@ -19,6 +19,7 @@ from .atom_features import (
 )
 from .bond_features import (
     get_bond_features,
+    get_bond_feature_dim,
 )
 
 
@@ -353,7 +354,11 @@ def _mol_to_graph_tensors(
                 bond_ring_stats=bond_ring_stats,
             )
         )
-    edge_attr = torch.as_tensor(np.asarray(edge_attr_feat), dtype=torch.float)
+    if edge_attr_feat:
+        edge_attr_arr = np.asarray(edge_attr_feat)
+    else:
+        edge_attr_arr = np.empty((0, get_bond_feature_dim()), dtype=float)
+    edge_attr = torch.as_tensor(edge_attr_arr, dtype=torch.float)
 
     return x, edge_index, edge_attr
 
