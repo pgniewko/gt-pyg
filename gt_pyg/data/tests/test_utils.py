@@ -6,7 +6,9 @@ from rdkit import Chem
 from rdkit.Chem import rdPartialCharges
 from torch_geometric.data import Batch
 
+from gt_pyg.data import get_bond_feature_dim
 from gt_pyg.data.utils import _mol_to_graph_tensors, get_tensor_data
+from gt_pyg.nn import GraphTransformerNet
 
 ETHANOL = "CCO"
 METHANE = "C"
@@ -184,4 +186,24 @@ class TestMolToGraphTensors:
         x, edge_index, edge_attr = _mol_to_graph_tensors(mol)
         assert x.shape[0] == 1
         assert edge_index.shape == (2, 0)
-        assert edge_attr.shape[0] == 0
+        assert edge_attr.shape == (0, get_bond_feature_dim())
+
+
+class TestZeroEdgeGraphs:
+    """Single-atom graphs should remain model-compatible."""
+
+    def test_model_forward_single_atom_graph(self):
+        data = get_tensor_data([METHANE])[0]
+        batch = Batch.from_data_list([data])
+        model = GraphTransformerNet(
+            node_dim_in=batch.x.shape[1],
+            edge_dim_in=batch.edge_attr.shape[1],
+            hidden_dim=32,
+            num_gt_layers=1,
+            num_heads=4,
+        )
+
+        pred, log_var = model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
+
+        assert pred.shape == (1, 1)
+        assert log_var.shape == (1, 1)
