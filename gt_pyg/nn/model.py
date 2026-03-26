@@ -256,7 +256,8 @@ class GraphTransformerNet(nn.Module):
         edge_attr: Optional[Tensor],
         batch: Union[Batch, Tensor],
         zero_var: bool = False,
-    ) -> Tuple[Tensor, Tensor]:
+        return_latent: bool = False,
+    ) -> Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor]]:
         """Forward pass with variational (reparameterization) sampling.
 
         In training mode (``zero_var=False``), predictions are stochastic::
@@ -273,9 +274,14 @@ class GraphTransformerNet(nn.Module):
                 Required if ``edge_dim_in`` was set.
             batch: ``Batch`` object or batch-index tensor ``[num_nodes]``.
             zero_var: If True, skip sampling even during training.
+            return_latent: If True, also return the graph-level latent code
+                after readout normalization and before head dropout.
 
         Returns:
-            (prediction, log_var) — both ``[batch_size, num_tasks]``.
+            By default returns ``(prediction, log_var)`` — both
+            ``[batch_size, num_tasks]``. If ``return_latent=True``, returns
+            ``(prediction, log_var, latent)`` where ``latent`` has shape
+            ``[batch_size, num_aggrs * hidden_dim]``.
         """
         # Node embedding
         h = self.node_emb(x)  # [N, H]
@@ -303,8 +309,8 @@ class GraphTransformerNet(nn.Module):
         g = self.global_pool(h, batch_index)  # [B, num_aggrs * H]
 
         # Readout norm + dropout
-        g = self.readout_norm(g)
-        g = self.readout_dropout(g)
+        latent = self.readout_norm(g)
+        g = self.readout_dropout(latent)
 
         # Heads
         mu = self.mu_mlp(g)            # [B, T]
@@ -320,6 +326,8 @@ class GraphTransformerNet(nn.Module):
         else:
             pred = mu                   # deterministic mean
 
+        if return_latent:
+            return pred, log_var, latent
         return pred, log_var
 
 
@@ -563,4 +571,3 @@ class GraphTransformerNet(nn.Module):
                 )
 
         self.load_state_dict(checkpoint["model_state_dict"], strict=strict)
-
