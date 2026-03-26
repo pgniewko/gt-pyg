@@ -213,6 +213,51 @@ def test_get_config(model):
     assert len(model2.gt_layers) == len(model.gt_layers)
 
 
+# ---- Forward API Tests ----
+
+def test_forward_return_latent_is_opt_in_and_backward_compatible(model, sample_input):
+    """Default outputs remain unchanged when latent return is requested."""
+    model.eval()
+
+    with torch.no_grad():
+        out1, log_var1 = model(**sample_input, zero_var=True)
+        out2, log_var2, latent = model(
+            **sample_input,
+            zero_var=True,
+            return_latent=True,
+        )
+
+    assert torch.allclose(out1, out2)
+    assert torch.allclose(log_var1, log_var2)
+    assert latent.shape == (1, model.num_aggrs * model.hidden_dim)
+
+
+def test_forward_return_latent_returns_pre_dropout_embedding(model, sample_input):
+    """Returned latent matches the normalized pooled graph embedding."""
+    model.eval()
+
+    with torch.no_grad():
+        h = model.node_emb(sample_input["x"])
+        h = model.input_norm(h)
+        h = model.input_dropout(h)
+
+        e = model.edge_emb(sample_input["edge_attr"])
+        for gt_layer in model.gt_layers:
+            h, e = gt_layer(x=h, edge_index=sample_input["edge_index"], edge_attr=e)
+
+        batch_index = model._get_batch_index(sample_input["batch"])
+        pooled = model.global_pool(h, batch_index)
+        expected_latent = model.readout_norm(pooled)
+
+        _out, _log_var, latent = model(
+            **sample_input,
+            zero_var=True,
+            return_latent=True,
+        )
+
+    assert torch.allclose(latent, expected_latent)
+
+
 # ---- Integration Test ----
 
 def test_transfer_learning(model, sample_input, tmp_path):
