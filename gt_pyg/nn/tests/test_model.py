@@ -213,7 +213,7 @@ def test_get_config(model):
     assert len(model2.gt_layers) == len(model.gt_layers)
 
 
-# ---- Forward API Tests ----
+# ---- Forward Pass API Tests ----
 
 def test_forward_return_latent_is_opt_in_and_backward_compatible(model, sample_input):
     """Default outputs remain unchanged when latent return is requested."""
