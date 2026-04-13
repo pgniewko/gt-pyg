@@ -385,10 +385,38 @@ def _to_float_sequence(
     return np.array(cleaned, dtype=np.float32)
 
 
+def _summarize_invalid_gasteiger_charges(mol: Chem.Mol) -> Optional[str]:
+    """Return a short summary if any atom has missing or non-finite charges."""
+    issues = []
+    for atom in mol.GetAtoms():
+        label = f"{atom.GetIdx()}:{atom.GetSymbol()}"
+        if not atom.HasProp("_GasteigerCharge"):
+            issues.append(f"{label}=missing")
+            continue
+        try:
+            charge = float(atom.GetDoubleProp("_GasteigerCharge"))
+        except Exception:
+            issues.append(f"{label}=unreadable")
+            continue
+        if np.isnan(charge):
+            issues.append(f"{label}=NaN")
+        elif np.isinf(charge):
+            issues.append(f"{label}=Inf")
+
+    if not issues:
+        return None
+
+    preview = ", ".join(issues[:3])
+    if len(issues) > 3:
+        preview += ", ..."
+    return f"invalid _GasteigerCharge values for {len(issues)} atom(s): {preview}"
+
+
 def get_tensor_data(
     x_smiles: List[str],
     y: Optional[List[Union[float, int, Sequence[Optional[float]], np.ndarray]]] = None,
     standardize: bool = False,
+    ids: Optional[List[Any]] = None,
 ) -> List[Data]:
     """Build torch_geometric molecular graphs with optional labels and masks.
 
@@ -397,7 +425,8 @@ def get_tensor_data(
     be ``None``/``np.nan``; a mask ``y_mask`` (1.0=present, 0.0=missing) is
     included per sample.  When ``y`` is ``None`` (inference mode), the
     returned ``Data`` objects contain only graph features — no ``y`` or
-    ``y_mask`` attributes.
+    ``y_mask`` attributes. Compounds with invalid Gasteiger charges are
+    skipped with a warning.
 
     Args:
         x_smiles (List[str]): SMILES strings.
@@ -408,9 +437,11 @@ def get_tensor_data(
             pipeline standardization before canonicalization.  Requires
             ``chembl_structure_pipeline`` (``pip install gt_pyg[chembl]``).
             Defaults to ``False``.
+        ids (Optional[List[Any]], optional): Optional compound identifiers
+            aligned with ``x_smiles``. Defaults to ``None``.
 
     Returns:
-        List[Data]: One ``Data`` per sample with fields:
+        List[Data]: One ``Data`` per valid sample with fields:
             - ``x`` (torch.FloatTensor): Node features ``[N, F]``.
             - ``edge_index`` (torch.LongTensor): COO edges ``[2, E]``.
             - ``edge_attr`` (torch.FloatTensor): Edge features ``[E, D]``.
@@ -430,11 +461,24 @@ def get_tensor_data(
             f"x_smiles and y must have the same length, "
             f"got {len(x_smiles)} and {len(y)}"
         )
+    if ids is not None and len(x_smiles) != len(ids):
+        raise ValueError(
+            f"x_smiles and ids must have the same length, "
+            f"got {len(x_smiles)} and {len(ids)}"
+        )
 
     data_list: List[Data] = []
     y_iter = y if has_labels else [None] * len(x_smiles)
+    ids_iter = ids if ids is not None else [None] * len(x_smiles)
 
-    for smiles, y_val in tqdm(zip(x_smiles, y_iter), total=len(x_smiles), desc="Processing data"):
+    for row, (smiles, y_val, compound_id) in tqdm(
+        enumerate(zip(x_smiles, y_iter, ids_iter)),
+        total=len(x_smiles),
+        desc="Processing data",
+    ):
+        if compound_id is None:
+            compound_id = row
+
         # Optional ChEMBL standardization pre-step
         if standardize:
             std_smi = standardize_smiles(smiles)
@@ -451,7 +495,29 @@ def get_tensor_data(
         try:
             rdPartialCharges.ComputeGasteigerCharges(mol)
         except Exception as e:
-            logger.warning("Gasteiger charge computation failed for '%s': %s", smiles, e)
+            logger.warning(
+                "Skipping compound due to invalid Gasteiger charges: "
+                "compound_id=%r row=%d smiles=%r reason=%s. "
+                "Consider removing this compound from the dataset.",
+                compound_id,
+                row,
+                smiles,
+                f"Gasteiger charge computation failed: {e}",
+            )
+            continue
+
+        invalid_reason = _summarize_invalid_gasteiger_charges(mol)
+        if invalid_reason is not None:
+            logger.warning(
+                "Skipping compound due to invalid Gasteiger charges: "
+                "compound_id=%r row=%d smiles=%r reason=%s. "
+                "Consider removing this compound from the dataset.",
+                compound_id,
+                row,
+                smiles,
+                invalid_reason,
+            )
+            continue
 
         # Extract graph tensors (node features, edges, edge attributes)
         x, edge_index, edge_attr = _mol_to_graph_tensors(mol)

@@ -13,6 +13,10 @@ from gt_pyg.nn import GraphTransformerNet
 ETHANOL = "CCO"
 METHANE = "C"
 BENZENE = "c1ccccc1"
+BAD_GASTEIGER_SMILES = (
+    "CC[P](CC)(CC)=[Au][S][C@@H]1O[C@H](COC(C)=O)[C@@H](OC(C)=O)"
+    "[C@H](OC(C)=O)[C@H]1OC(C)=O"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +114,41 @@ class TestLengthValidation:
     def test_equal_length_succeeds(self):
         data_list = get_tensor_data([ETHANOL, METHANE], [1.0, 2.0])
         assert len(data_list) == 2
+
+    def test_more_ids_than_smiles(self):
+        with pytest.raises(ValueError, match="same length"):
+            get_tensor_data([ETHANOL], ids=["mol-1", "mol-2"])
+
+
+class TestInvalidGasteigerCharges:
+    """Invalid Gasteiger charges should skip compounds with a clear warning."""
+
+    def test_skips_invalid_compound_with_id(self, caplog):
+        with caplog.at_level("WARNING", logger="gt_pyg.data.utils"):
+            data_list = get_tensor_data([BAD_GASTEIGER_SMILES], ids=["E-issue94"])
+
+        assert data_list == []
+        assert "compound_id='E-issue94'" in caplog.text
+        assert BAD_GASTEIGER_SMILES in caplog.text
+        assert "invalid _GasteigerCharge values" in caplog.text
+        assert "Consider removing this compound from the dataset." in caplog.text
+
+    def test_skips_invalid_compound_with_row_fallback(self, caplog):
+        with caplog.at_level("WARNING", logger="gt_pyg.data.utils"):
+            data_list = get_tensor_data([BAD_GASTEIGER_SMILES])
+
+        assert data_list == []
+        assert "compound_id=0" in caplog.text
+        assert "row=0" in caplog.text
+
+    def test_skips_only_invalid_rows_and_keeps_label_alignment(self, caplog):
+        with caplog.at_level("WARNING", logger="gt_pyg.data.utils"):
+            data_list = get_tensor_data([BAD_GASTEIGER_SMILES, ETHANOL], [1.0, 2.0])
+
+        assert len(data_list) == 1
+        assert data_list[0].y.shape == (1, 1)
+        assert data_list[0].y.item() == pytest.approx(2.0)
+        assert "compound_id=0" in caplog.text
 
 
 # ---------------------------------------------------------------------------
