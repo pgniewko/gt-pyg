@@ -1,5 +1,9 @@
 # Examples
 
+> Notebook compatibility: these notebooks are version-pinned. If a notebook
+> says `v1.6.0` or `v1.6.1b`, run it from that git tag; current `HEAD` may
+> expose newer APIs.
+
 - [OpenADMET-LogD.ipynb](OpenADMET-LogD.ipynb) — A simple example of how to train and evaluate a Graph Transformer model on the OpenADMET LogD endpoint using `gt-pyg`.
 - [train_logd.ipynb](train_logd.ipynb) — Single-task training for **LogD** prediction (tag `v1.6.0`).
 - [train_ksol.ipynb](train_ksol.ipynb) — Single-task training for **KSOL** (solubility) prediction (tag `v1.6.0`). The model is trained on the log-transformed endpoint `LogS = log10((KSOL + 1) * 1e-6)`.

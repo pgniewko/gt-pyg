@@ -83,27 +83,49 @@ tr_dataset = get_tensor_data(dataset['SMILES'].tolist(), dataset['logS'].tolist(
 train_loader = DataLoader(tr_dataset, batch_size=256)
 ```
 
+Notes:
+
+- Pass `y=None` to `get_tensor_data(...)` for inference-only graphs.
+- Multi-task labels may be sequences containing `None` or `np.nan`; `get_tensor_data(...)` adds a `y_mask` tensor so losses can ignore missing tasks.
+- Use `ids=` to attach stable compound identifiers to warnings when a row is skipped (for example, because RDKit/Gasteiger charge computation failed).
+
 ---
 
 ## Public API
+
+The tables below cover the primary supported entry points. For the exhaustive
+current export lists, see [`gt_pyg/__init__.py`](gt_pyg/__init__.py),
+[`gt_pyg/nn/__init__.py`](gt_pyg/nn/__init__.py), and
+[`gt_pyg/data/__init__.py`](gt_pyg/data/__init__.py).
+
+### Top-Level Import (`gt_pyg`)
+
+| Symbol | Description |
+|--------|-------------|
+| `__version__` | Package version derived from the current git tag or installed metadata |
+| `GraphTransformerNet`, `GTConv`, `MLP` | Core model components re-exported at the package top level |
+| `get_tensor_data`, `get_atom_feature_dim`, `get_bond_feature_dim` | High-level data helpers re-exported at the package top level |
 
 ### Model (`gt_pyg.nn`)
 
 | Symbol | Description |
 |--------|-------------|
-| `GraphTransformerNet` | Full model with variational readout (`mu` + `log_var` heads), configurable head depth (`num_head_layers`), optional head LayerNorm (`head_norm`), residual connections (`head_residual`), and separate `head_dropout` rate |
+| `GraphTransformerNet` | Full graph-level model with variational readout (`mu` + `log_var` heads), configurable head depth (`num_head_layers`), optional head LayerNorm (`head_norm`), residual connections (`head_residual`), separate `head_dropout`, and optional latent return via `forward(..., return_latent=True)` |
 | `GTConv` | Single Graph Transformer convolution layer |
 | `MLP` | Multi-layer perceptron with optional LayerNorm and residual connections |
-| `GraphTransformerNet.from_config(config)` | Construct a model from a config dict |
+| `model.get_config()` / `GraphTransformerNet.from_config(config)` | Round-trip model configs for reproducible reconstruction |
+| `model.num_parameters()` | Number of trainable parameters |
 
 ### Checkpointing & Utilities (`gt_pyg.nn`)
 
 | Symbol | Description |
 |--------|-------------|
-| `model.save_checkpoint(path)` | Save model, optimizer, and metadata |
-| `model.load_checkpoint(path)` | Restore from checkpoint |
+| `model.save_checkpoint(path, ...)` | Save model weights, config, optional optimizer/scheduler state, and metadata |
+| `GraphTransformerNet.load_checkpoint(path, ...)` | Reconstruct a new model from a checkpoint and return `(model, checkpoint_dict)` |
+| `model.load_weights(path, ...)` | Load checkpoint weights into an existing model instance |
+| `save_checkpoint(...)` / `load_checkpoint(...)` | Lower-level checkpoint helpers in [`gt_pyg/nn/checkpoint.py`](gt_pyg/nn/checkpoint.py) |
 | `get_checkpoint_info(path)` | Read checkpoint metadata without loading weights |
-| `model.freeze(components)` | Freeze parameters by component name |
+| `model.freeze(components, exclude=None)` | Freeze parameters by component name (`embeddings`, `encoder`, `gt_layers`, `gt_layer_i`, `heads`, `pooling`, `all`) |
 | `model.unfreeze(components)` | Unfreeze parameters |
 | `model.get_frozen_status()` | Dict of frozen/unfrozen components |
 
@@ -111,14 +133,19 @@ train_loader = DataLoader(tr_dataset, batch_size=256)
 
 | Symbol | Description |
 |--------|-------------|
-| `get_tensor_data(x_smiles, y, standardize)` | SMILES + labels to list of PyG `Data` objects (optional ChEMBL standardization) |
-| `get_atom_feature_dim()` | Dimensionality of the atom feature vector |
-| `get_bond_feature_dim()` | Dimensionality of the bond feature vector |
+| `get_tensor_data(x_smiles, y=None, standardize=False, ids=None)` | Build PyG molecular `Data` objects from SMILES for single-task, multi-task, or inference-only use |
+| `get_atom_features(atom, ...)` / `get_bond_features(bond, ...)` | Low-level featurizers for custom preprocessing pipelines |
+| `get_atom_feature_dim(...)` / `get_bond_feature_dim(...)` | Dimensionality of the atom/bond feature vectors for the current featurization settings |
+| `get_ring_membership_stats(mol)` / `get_pharmacophore_flags(mol)` | Reusable ring-statistics and pharmacophore preprocessing helpers |
 | `get_gnm_encodings(adjacency)` | Kirchhoff pseudoinverse diagonal (GNM) |
-| `canonicalize_smiles(smiles)` | Canonical SMILES string |
-| `standardize_smiles(smiles)` | Standardize via ChEMBL structure pipeline (requires `pip install gt_pyg[chembl]`) |
+| `canonicalize_smiles(...)` / `standardize_smiles(smiles)` | Canonicalization and optional ChEMBL structure-pipeline standardization |
+| `PERMITTED_ATOMS`, `RING_COUNT_CATEGORIES`, `RING_SIZE_CATEGORIES`, `PERIOD_CATEGORIES`, `GROUP_CATEGORIES` | Exported feature vocabularies and category constants |
 
-`GraphTransformerNet`, `GTConv`, `MLP`, `get_tensor_data`, `get_atom_feature_dim`, and `get_bond_feature_dim` are also available via the top-level `gt_pyg` import.
+Detailed implementation notes live in
+[`gt_pyg/nn/model.py`](gt_pyg/nn/model.py),
+[`gt_pyg/data/utils.py`](gt_pyg/data/utils.py),
+[`gt_pyg/data/atom_features.py`](gt_pyg/data/atom_features.py), and
+[`gt_pyg/data/bond_features.py`](gt_pyg/data/bond_features.py).
 
 ---
 
@@ -147,6 +174,10 @@ pytest gt_pyg/ -v
 
 The `examples/` directory contains training and evaluation notebooks for the
 [OpenADMET](https://openadmet.ghost.io/openadmet-expansionrx-blind-challenge/) benchmark.
+
+> Notebook compatibility: the notebooks below are pinned to the versions shown
+> in their headings. If a notebook says `v1.6.0` or `v1.6.1b`, run it from that
+> git tag; the current library API in this checkout may be newer.
 
 ### Single-task models (`v1.6.0`)
 
