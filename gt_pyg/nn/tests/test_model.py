@@ -2,12 +2,14 @@
 
 import logging
 import importlib.metadata
+from types import SimpleNamespace
 
 import pytest
 import torch
 
 import gt_pyg
 import gt_pyg._version as version_mod
+import gt_pyg._version_utils as version_utils
 from gt_pyg.nn import GraphTransformerNet, get_checkpoint_info, load_checkpoint
 
 
@@ -292,6 +294,49 @@ def test_version_is_defined():
     assert gt_pyg.__version__ != ""
 
 
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        ("1.6.0-alpha.2", "1.6.0a2"),
+        ("1.6.0-beta.1", "1.6.0b1"),
+        ("1.6.0-rc.3", "1.6.0rc3"),
+    ],
+)
+def test_version_utils_normalizes_prerelease_tags(version, expected):
+    """Shared version helper converts common prerelease tags to PEP 440."""
+    assert version_utils._normalize_prerelease(version) == expected
+
+
+@pytest.mark.parametrize(
+    ("stdout", "expected"),
+    [
+        ("v1.6.0-beta.1-0-gabc123\n", "1.6.0b1"),
+        ("v1.6.0-beta.1-2-gabc123\n", "1.6.0b1.dev2+abc123"),
+    ],
+)
+def test_version_utils_parses_git_describe(monkeypatch, stdout, expected):
+    """Shared version helper parses git describe output for setup and runtime."""
+
+    def fake_run(*_args, **_kwargs):
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(version_utils.subprocess, "run", fake_run)
+
+    assert version_utils._get_version_from_git() == expected
+
+
+def test_version_utils_rejects_malformed_git_describe(monkeypatch):
+    """Malformed git describe output fails before setup/runtime fallback."""
+
+    def fake_run(*_args, **_kwargs):
+        return SimpleNamespace(returncode=0, stdout="v1.6.0-beta.1\n", stderr="")
+
+    monkeypatch.setattr(version_utils.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="Cannot parse git describe output"):
+        version_utils._get_version_from_git()
+
+
 def test_version_prefers_git_in_source_checkout(monkeypatch):
     """Source checkouts should use git instead of potentially stale metadata."""
 
@@ -301,9 +346,13 @@ def test_version_prefers_git_in_source_checkout(monkeypatch):
     def fail_metadata(_name):
         raise AssertionError("metadata lookup should not be used in a git checkout")
 
-    monkeypatch.setattr(version_mod, "_get_version_from_git", fake_git_version)
+    monkeypatch.setattr(version_utils, "_get_version_from_git", fake_git_version)
     monkeypatch.setattr(importlib.metadata, "version", fail_metadata)
-    monkeypatch.setattr(version_mod.os.path, "isdir", lambda path: path.endswith(".git"))
+    monkeypatch.setattr(
+        version_utils.os.path,
+        "isdir",
+        lambda path: path.endswith(".git"),
+    )
 
     assert version_mod._get_version() == "1.2.3.dev4+abc1234"
 
@@ -311,7 +360,7 @@ def test_version_prefers_git_in_source_checkout(monkeypatch):
 def test_version_falls_back_to_metadata_outside_git(monkeypatch):
     """Installed packages without git metadata should use importlib.metadata."""
 
-    monkeypatch.setattr(version_mod.os.path, "isdir", lambda path: False)
+    monkeypatch.setattr(version_utils.os.path, "isdir", lambda path: False)
     monkeypatch.setattr(importlib.metadata, "version", lambda _name: "9.9.9")
 
     assert version_mod._get_version() == "9.9.9"
