@@ -14,7 +14,7 @@ Clone the repository and install locally:
 ```bash
 git clone https://github.com/pgniewko/gt-pyg.git
 cd gt-pyg
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install .
 ```
@@ -157,7 +157,7 @@ Clone the repository, create a virtual environment, and install in editable mode
 ```bash
 git clone https://github.com/pgniewko/gt-pyg.git
 cd gt-pyg
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 ```
@@ -206,8 +206,8 @@ stored in `examples/data/submissions/beardy-polonium-submission.csv`.
 ### Comparison
 
 [`compare_predictions.ipynb`](examples/compare_predictions.ipynb) evaluates
-the `v1.6.0` single-task models and `v1.6.1b` fine-tuned models against the
-beardy-polonium ensemble on LogD and log-transformed KSOL. Metrics (MAE, RAE,
+the `v1.6.0` single-task models against the beardy-polonium ensemble on LogD
+and log-transformed KSOL. Metrics (MAE, RAE,
 R², Spearman R, Kendall's Tau) are reported on the full test set, the
 leaderboard (public) subset, and the private subset, with bootstrap
 confidence intervals and significance tests.
