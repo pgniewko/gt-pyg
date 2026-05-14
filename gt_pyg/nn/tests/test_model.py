@@ -217,6 +217,54 @@ def test_get_config(model):
 
 # ---- Forward Pass API Tests ----
 
+def test_forward_training_samples_and_eval_is_deterministic(sample_input):
+    """Training samples from the variance head; eval and zero_var return mu."""
+    torch.manual_seed(1234)
+    model = GraphTransformerNet(
+        node_dim_in=16,
+        edge_dim_in=8,
+        hidden_dim=32,
+        num_gt_layers=2,
+        num_heads=4,
+        norm="ln",
+        dropout=0.0,
+        head_dropout=0.0,
+    )
+
+    with torch.no_grad():
+        for param in model.log_var_mlp.parameters():
+            param.zero_()
+        model.log_var_mlp.output_layer.bias.fill_(0.5)
+
+    model.train()
+    with torch.no_grad():
+        train_pred1, train_log_var1 = model(**sample_input)
+        train_pred2, train_log_var2 = model(**sample_input)
+
+    assert not torch.allclose(train_pred1, train_pred2)
+    assert torch.allclose(train_log_var1, train_log_var2)
+    assert torch.allclose(train_log_var1, torch.full_like(train_log_var1, 0.5))
+
+    model.eval()
+    with torch.no_grad():
+        eval_pred1, eval_log_var1 = model(**sample_input)
+        eval_pred2, eval_log_var2 = model(**sample_input)
+
+    assert torch.allclose(eval_pred1, eval_pred2)
+    assert torch.allclose(eval_log_var1, eval_log_var2)
+    assert torch.allclose(eval_log_var1, torch.full_like(eval_log_var1, 0.5))
+
+    model.train()
+    with torch.no_grad():
+        zero_var_pred1, zero_var_log_var1 = model(**sample_input, zero_var=True)
+        zero_var_pred2, zero_var_log_var2 = model(**sample_input, zero_var=True)
+
+    assert torch.allclose(zero_var_pred1, zero_var_pred2)
+    assert torch.allclose(zero_var_pred1, eval_pred1)
+    assert torch.allclose(zero_var_log_var1, zero_var_log_var2)
+    assert torch.allclose(zero_var_log_var1, torch.full_like(zero_var_log_var1, 0.5))
+
+
 def test_forward_return_latent_is_opt_in_and_backward_compatible(model, sample_input):
     """Default outputs remain unchanged when latent return is requested."""
     model.eval()
