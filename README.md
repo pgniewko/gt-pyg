@@ -116,6 +116,13 @@ current export lists, see [`gt_pyg/__init__.py`](gt_pyg/__init__.py),
 | `model.get_config()` / `GraphTransformerNet.from_config(config)` | Round-trip model configs for reproducible reconstruction |
 | `model.num_parameters()` | Number of trainable parameters |
 
+`GraphTransformerNet.forward(...)` returns `(prediction, log_var)`. In
+training mode, `prediction` is sampled from the learned Gaussian readout unless
+`zero_var=True`; in eval mode, `prediction` is always the deterministic mean
+`mu`. The returned `log_var` is always the learned, clamped log-variance head
+output and can be used for Gaussian losses or uncertainty estimates.
+`zero_var=True` skips sampling only; it does not zero or suppress `log_var`.
+
 ### Checkpointing & Utilities (`gt_pyg.nn`)
 
 | Symbol | Description |

@@ -30,7 +30,9 @@ class GraphTransformerNet(nn.Module):
 
     This enables gradient-based optimization of probabilistic objectives
     (e.g. Gaussian NLL loss).  Set ``zero_var=True`` to disable sampling
-    and return the deterministic mean instead.
+    and return the deterministic mean instead.  The ``zero_var`` flag only
+    controls whether ``prediction`` is sampled; the returned ``log_var`` still
+    comes from the learned variance head.
 
     During **evaluation** the forward pass always returns the deterministic
     mean.  ``log_var`` is always returned for loss computation or uncertainty
@@ -260,12 +262,15 @@ class GraphTransformerNet(nn.Module):
     ) -> Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor]]:
         """Forward pass with variational (reparameterization) sampling.
 
-        In training mode (``zero_var=False``), predictions are stochastic::
+        In training mode with ``zero_var=False``, ``prediction`` is a
+        stochastic sample from the learned Gaussian::
 
             pred = mu + exp(0.5 * log_var) * epsilon,  epsilon ~ N(0, 1)
 
-        In eval mode (or ``zero_var=True``), predictions are the
-        deterministic mean ``mu``.  ``log_var`` is always returned.
+        In eval mode, or when ``zero_var=True``, ``prediction`` is the
+        deterministic mean ``mu``.  ``log_var`` is always returned from the
+        learned variance head; ``zero_var=True`` does not replace it with
+        zeros.
 
         Args:
             x: Node features ``[num_nodes, node_dim_in]``.
@@ -273,7 +278,9 @@ class GraphTransformerNet(nn.Module):
             edge_attr: Edge features ``[num_edges, edge_dim_in]``.
                 Required if ``edge_dim_in`` was set.
             batch: ``Batch`` object or batch-index tensor ``[num_nodes]``.
-            zero_var: If True, skip sampling even during training.
+            zero_var: If True, skip sampling even during training.  This
+                affects only ``prediction`` and leaves returned ``log_var``
+                unchanged.
             return_latent: If True, also return the graph-level latent code
                 after readout normalization and before head dropout.
 
