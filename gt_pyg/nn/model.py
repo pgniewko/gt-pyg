@@ -487,6 +487,7 @@ class GraphTransformerNet(nn.Module):
         global_step: Optional[int] = None,
         best_metric: Optional[float] = None,
         extra: Optional[Dict[str, Any]] = None,
+        require_version: bool = True,
     ) -> None:
         """
         Save checkpoint to disk.
@@ -499,6 +500,7 @@ class GraphTransformerNet(nn.Module):
             global_step: Global training step.
             best_metric: Best validation metric.
             extra: Additional user data.
+            require_version: If True, reject checkpoints without usable provenance.
         """
         from .checkpoint import save_checkpoint
 
@@ -516,6 +518,7 @@ class GraphTransformerNet(nn.Module):
             global_step=global_step,
             best_metric=best_metric,
             extra=merged_extra,
+            require_version=require_version,
         )
 
     @classmethod

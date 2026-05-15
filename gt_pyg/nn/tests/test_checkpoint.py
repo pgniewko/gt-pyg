@@ -4,6 +4,7 @@ import pytest
 import torch
 from torch import nn
 
+import gt_pyg.nn.checkpoint as checkpoint_mod
 from gt_pyg.nn.checkpoint import save_checkpoint, load_checkpoint, get_checkpoint_info
 
 
@@ -92,6 +93,26 @@ class TestSaveLoad:
         assert ckpt["gt_pyg_version"] == gt_pyg.__version__
         assert "created_at" in ckpt
         assert ckpt["checkpoint_version"] == 1
+
+    def test_unknown_version_rejected_by_default(self, model, tmp_path, monkeypatch):
+        monkeypatch.setattr(checkpoint_mod, "__version__", "0+unknown")
+
+        with pytest.raises(RuntimeError, match="version is unknown"):
+            save_checkpoint(model, tmp_path / "ckpt.pt")
+
+    def test_unknown_version_can_warn_when_relaxed(
+        self, model, tmp_path, monkeypatch, caplog,
+    ):
+        import logging
+
+        monkeypatch.setattr(checkpoint_mod, "__version__", "0+unknown")
+
+        with caplog.at_level(logging.WARNING, logger="gt_pyg.nn.checkpoint"):
+            save_checkpoint(model, tmp_path / "ckpt.pt", require_version=False)
+
+        ckpt = torch.load(tmp_path / "ckpt.pt", map_location="cpu", weights_only=False)
+        assert ckpt["gt_pyg_version"] == "0+unknown"
+        assert any("version is unknown" in msg for msg in caplog.messages)
 
 
 # ---------------------------------------------------------------------------
