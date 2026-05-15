@@ -23,6 +23,7 @@ def save_checkpoint(
     global_step: Optional[int] = None,
     best_metric: Optional[float] = None,
     extra: Optional[Dict[str, Any]] = None,
+    require_version: bool = True,
 ) -> None:
     """
     Save checkpoint to disk (generic utility).
@@ -37,8 +38,18 @@ def save_checkpoint(
         global_step: Training step.
         best_metric: Best metric value.
         extra: Additional data.
+        require_version: If True, reject checkpoints without usable provenance.
     """
     from datetime import datetime, timezone
+
+    if not __version__ or __version__ == "0+unknown":
+        msg = (
+            "gt-pyg version is unknown; refusing to save checkpoint without "
+            "source provenance."
+        )
+        if require_version:
+            raise RuntimeError(msg)
+        logger.warning(msg)
 
     path = Path(path)
     if path.suffix != ".pt":

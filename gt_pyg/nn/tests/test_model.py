@@ -358,7 +358,7 @@ def test_version_utils_normalizes_prerelease_tags(version, expected):
 @pytest.mark.parametrize(
     ("stdout", "expected"),
     [
-        ("v1.6.0-beta.1-0-gabc123\n", "1.6.0b1"),
+        ("v1.6.0-beta.1-0-gabc123\n", "1.6.0b1+abc123"),
         ("v1.6.0-beta.1-2-gabc123\n", "1.6.0b1.dev2+abc123"),
     ],
 )
