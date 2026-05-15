@@ -11,6 +11,7 @@ from torch_geometric.nn.aggr import MultiAggregation
 
 from .gt_conv import GTConv
 from .mlp import MLP
+from .utils import validate_aggregators, validate_dropout, validate_num_gt_layers
 
 
 class GraphTransformerNet(nn.Module):
@@ -73,6 +74,12 @@ class GraphTransformerNet(nn.Module):
 
         # Resolve head_dropout: fall back to encoder dropout if not specified
         resolved_head_dropout = head_dropout if head_dropout is not None else dropout
+
+        validate_dropout("dropout", dropout)
+        validate_dropout("head_dropout", resolved_head_dropout)
+        validate_num_gt_layers(num_gt_layers)
+        validate_aggregators("gt_aggregators", gt_aggregators)
+        validate_aggregators("aggregators", aggregators)
 
         # Store config for checkpointing
         self._config = {
