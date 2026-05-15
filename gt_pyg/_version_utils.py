@@ -36,7 +36,7 @@ def _get_version_from_git() -> str:
     ver = _normalize_prerelease(ver)
 
     if int(distance) == 0:
-        return f"{ver}+{sha}"
+        return ver
     return f"{ver}.dev{distance}+{sha}"
 
 
