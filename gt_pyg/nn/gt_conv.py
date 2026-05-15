@@ -11,6 +11,7 @@ from torch_geometric.nn.aggr import MultiAggregation
 
 # GT-PyG
 from .mlp import MLP
+from .utils import validate_aggregators, validate_dropout
 
 
 class GTConv(MessagePassing):
@@ -49,6 +50,9 @@ class GTConv(MessagePassing):
         """
         if aggregators is None:
             aggregators = ["sum"]
+
+        validate_dropout("dropout", dropout)
+        validate_aggregators("aggregators", aggregators)
 
         # Choose aggregation
         if len(aggregators) == 1 and aggregators[0] in ("sum", "add"):
@@ -398,4 +402,3 @@ class GTConv(MessagePassing):
             f"gate: {self.gate}, "
             f"norm: {self.norm_type})"
         )
-
