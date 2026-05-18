@@ -41,6 +41,28 @@ pip install -e ".[all]"
 
 ---
 
+
+## Developers
+
+### Installation (dev)
+
+Clone the repository, create a virtual environment, and install in editable mode with dev dependencies:
+```bash
+git clone https://github.com/pgniewko/gt-pyg.git
+cd gt-pyg
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+### Running tests
+
+```bash
+pytest gt_pyg/ -v
+```
+
+---
+
 ## USAGE
 
 The following code snippet demonstrates how to test the installation of `gt-pyg` and use the `GTConv` layer:
@@ -88,92 +110,6 @@ Notes:
 - Pass `y=None` to `get_tensor_data(...)` for inference-only graphs.
 - Multi-task labels may be sequences containing `None` or `np.nan`; `get_tensor_data(...)` adds a `y_mask` tensor so losses can ignore missing tasks.
 - Use `ids=` to attach stable compound identifiers to warnings when a row is skipped (for example, because RDKit/Gasteiger charge computation failed).
-
----
-
-## Public API
-
-The tables below cover the primary supported entry points. For the exhaustive
-current export lists, see [`gt_pyg/__init__.py`](gt_pyg/__init__.py),
-[`gt_pyg/nn/__init__.py`](gt_pyg/nn/__init__.py), and
-[`gt_pyg/data/__init__.py`](gt_pyg/data/__init__.py).
-
-### Top-Level Import (`gt_pyg`)
-
-| Symbol | Description |
-|--------|-------------|
-| `__version__` | Package version derived from the current git tag or installed metadata |
-| `GraphTransformerNet`, `GTConv`, `MLP` | Core model components re-exported at the package top level |
-| `get_tensor_data`, `get_atom_feature_dim`, `get_bond_feature_dim` | High-level data helpers re-exported at the package top level |
-
-### Model (`gt_pyg.nn`)
-
-| Symbol | Description |
-|--------|-------------|
-| `GraphTransformerNet` | Full graph-level model with variational readout (`mu` + `log_var` heads), configurable head depth (`num_head_layers`), optional head LayerNorm (`head_norm`), residual connections (`head_residual`), separate `head_dropout`, and optional latent return via `forward(..., return_latent=True)` |
-| `GTConv` | Single Graph Transformer convolution layer |
-| `MLP` | Multi-layer perceptron with optional LayerNorm and residual connections |
-| `model.get_config()` / `GraphTransformerNet.from_config(config)` | Round-trip model configs for reproducible reconstruction |
-| `model.num_parameters()` | Number of trainable parameters |
-
-`GraphTransformerNet.forward(...)` returns `(prediction, log_var)`. In
-training mode, `prediction` is sampled from the learned Gaussian readout unless
-`zero_var=True`; in eval mode, `prediction` is always the deterministic mean
-`mu`. The returned `log_var` is always the learned, clamped log-variance head
-output and can be used for Gaussian losses or uncertainty estimates.
-`zero_var=True` skips sampling only; it does not zero or suppress `log_var`.
-
-### Checkpointing & Utilities (`gt_pyg.nn`)
-
-| Symbol | Description |
-|--------|-------------|
-| `model.save_checkpoint(path, ...)` | Save model weights, config, optional optimizer/scheduler state, and metadata |
-| `GraphTransformerNet.load_checkpoint(path, ...)` | Reconstruct a new model from a checkpoint and return `(model, checkpoint_dict)` |
-| `model.load_weights(path, ...)` | Load checkpoint weights into an existing model instance |
-| `save_checkpoint(...)` / `load_checkpoint(...)` | Lower-level checkpoint helpers in [`gt_pyg/nn/checkpoint.py`](gt_pyg/nn/checkpoint.py) |
-| `get_checkpoint_info(path)` | Read checkpoint metadata without loading weights |
-| `model.freeze(components, exclude=None)` | Freeze parameters by component name (`embeddings`, `encoder`, `gt_layers`, `gt_layer_i`, `heads`, `pooling`, `all`) |
-| `model.unfreeze(components)` | Unfreeze parameters |
-| `model.get_frozen_status()` | Dict of frozen/unfrozen components |
-
-### Data (`gt_pyg.data`)
-
-| Symbol | Description |
-|--------|-------------|
-| `get_tensor_data(x_smiles, y=None, standardize=False, ids=None)` | Build PyG molecular `Data` objects from SMILES for single-task, multi-task, or inference-only use |
-| `get_atom_features(atom, ...)` / `get_bond_features(bond, ...)` | Low-level featurizers for custom preprocessing pipelines |
-| `get_atom_feature_dim(...)` / `get_bond_feature_dim(...)` | Dimensionality of the atom/bond feature vectors for the current featurization settings |
-| `get_ring_membership_stats(mol)` / `get_pharmacophore_flags(mol)` | Reusable ring-statistics and pharmacophore preprocessing helpers |
-| `get_gnm_encodings(adjacency)` | Kirchhoff pseudoinverse diagonal (GNM) |
-| `canonicalize_smiles(...)` / `standardize_smiles(smiles)` | Canonicalization and optional ChEMBL structure-pipeline standardization |
-| `PERMITTED_ATOMS`, `RING_COUNT_CATEGORIES`, `RING_SIZE_CATEGORIES`, `PERIOD_CATEGORIES`, `GROUP_CATEGORIES` | Exported feature vocabularies and category constants |
-
-Detailed implementation notes live in
-[`gt_pyg/nn/model.py`](gt_pyg/nn/model.py),
-[`gt_pyg/data/utils.py`](gt_pyg/data/utils.py),
-[`gt_pyg/data/atom_features.py`](gt_pyg/data/atom_features.py), and
-[`gt_pyg/data/bond_features.py`](gt_pyg/data/bond_features.py).
-
----
-
-## Developers
-
-### Installation (dev)
-
-Clone the repository, create a virtual environment, and install in editable mode with dev dependencies:
-```bash
-git clone https://github.com/pgniewko/gt-pyg.git
-cd gt-pyg
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
-
-### Running tests
-
-```bash
-pytest gt_pyg/ -v
-```
 
 ---
 
