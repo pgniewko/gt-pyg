@@ -11,7 +11,12 @@ from torch_geometric.nn.aggr import MultiAggregation
 
 from .gt_conv import GTConv
 from .mlp import MLP
-from .utils import validate_aggregators, validate_dropout, validate_num_gt_layers
+from .utils import (
+    make_norm,
+    validate_aggregators,
+    validate_dropout,
+    validate_num_gt_layers,
+)
 
 
 class GraphTransformerNet(nn.Module):
@@ -72,6 +77,14 @@ class GraphTransformerNet(nn.Module):
         if aggregators is None:
             aggregators = ["sum"]
 
+        # Store config for checkpointing: capture all constructor arguments
+        # (locals() holds exactly the resolved arguments at this point).
+        self._config = {
+            k: (list(v) if isinstance(v, list) else v)
+            for k, v in locals().items()
+            if k not in ("self", "__class__")
+        }
+
         # Resolve head_dropout: fall back to encoder dropout if not specified
         resolved_head_dropout = head_dropout if head_dropout is not None else dropout
 
@@ -80,27 +93,6 @@ class GraphTransformerNet(nn.Module):
         validate_num_gt_layers(num_gt_layers)
         validate_aggregators("gt_aggregators", gt_aggregators)
         validate_aggregators("aggregators", aggregators)
-
-        # Store config for checkpointing
-        self._config = {
-            "node_dim_in": node_dim_in,
-            "edge_dim_in": edge_dim_in,
-            "hidden_dim": hidden_dim,
-            "norm": norm,
-            "gate": gate,
-            "qkv_bias": qkv_bias,
-            "num_gt_layers": num_gt_layers,
-            "num_heads": num_heads,
-            "gt_aggregators": list(gt_aggregators),
-            "aggregators": list(aggregators),
-            "act": act,
-            "dropout": dropout,
-            "num_tasks": num_tasks,
-            "num_head_layers": num_head_layers,
-            "head_norm": head_norm,
-            "head_residual": head_residual,
-            "head_dropout": head_dropout,
-        }
 
         if num_tasks <= 0:
             raise ValueError("num_tasks must be >= 1")
@@ -126,20 +118,13 @@ class GraphTransformerNet(nn.Module):
             edge_in_dim_hidden = None  # GTConv will be instantiated without edge features
 
         # Input norm & dropout
-        if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
-            self.input_norm = nn.BatchNorm1d(hidden_dim)
-        elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
-            self.input_norm = nn.LayerNorm(hidden_dim)
-        else:
-            raise ValueError(f"Unknown norm type: {norm}")
-
+        self.input_norm = make_norm(norm, hidden_dim)
         self.input_dropout = nn.Dropout(p=dropout)
 
         # ---- Graph Transformer layers ----
         self.gt_layers = nn.ModuleList(
             [
                 GTConv(
-                    node_in_dim=hidden_dim,
                     hidden_dim=hidden_dim,
                     edge_in_dim=edge_in_dim_hidden,
                     num_heads=num_heads,
@@ -160,13 +145,7 @@ class GraphTransformerNet(nn.Module):
         head_in_dim = self.num_aggrs * hidden_dim
 
         # Readout norm & dropout before heads
-        if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
-            self.readout_norm = nn.BatchNorm1d(head_in_dim)
-        elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
-            self.readout_norm = nn.LayerNorm(head_in_dim)
-        else:
-            raise ValueError(f"Unknown norm type: {norm}")
-
+        self.readout_norm = make_norm(norm, head_in_dim)
         self.readout_dropout = nn.Dropout(p=resolved_head_dropout)
 
         # Slightly stronger heads (still modest by default)
@@ -201,39 +180,20 @@ class GraphTransformerNet(nn.Module):
         Re-initialize parameters.
 
         Embedding layers use Xavier uniform (they're added directly, no nonlinearity).
-        GTConv layers, norms, and MLP heads are reset via their own `reset_parameters`.
+        GTConv layers, norms, and MLP heads are reset via their own ``reset_parameters``.
         """
         # Embeddings
         nn.init.xavier_uniform_(self.node_emb.weight)
         if self.edge_emb is not None:
             nn.init.xavier_uniform_(self.edge_emb.weight)
 
-        # Norms
-        if isinstance(self.input_norm, nn.BatchNorm1d):
-            self.input_norm.reset_running_stats()
-            nn.init.ones_(self.input_norm.weight)
-            nn.init.zeros_(self.input_norm.bias)
-        elif isinstance(self.input_norm, nn.LayerNorm):
-            nn.init.ones_(self.input_norm.weight)
-            nn.init.zeros_(self.input_norm.bias)
-
-        if isinstance(self.readout_norm, nn.BatchNorm1d):
-            self.readout_norm.reset_running_stats()
-            nn.init.ones_(self.readout_norm.weight)
-            nn.init.zeros_(self.readout_norm.bias)
-        elif isinstance(self.readout_norm, nn.LayerNorm):
-            nn.init.ones_(self.readout_norm.weight)
-            nn.init.zeros_(self.readout_norm.bias)
-
-        # Propagate to children with their own reset
+        # Norms and children (BatchNorm1d/LayerNorm reset to weight=1, bias=0)
+        self.input_norm.reset_parameters()
+        self.readout_norm.reset_parameters()
         for m in self.gt_layers:
-            if hasattr(m, "reset_parameters"):
-                m.reset_parameters()
-
-        if hasattr(self.mu_mlp, "reset_parameters"):
-            self.mu_mlp.reset_parameters()
-        if hasattr(self.log_var_mlp, "reset_parameters"):
-            self.log_var_mlp.reset_parameters()
+            m.reset_parameters()
+        self.mu_mlp.reset_parameters()
+        self.log_var_mlp.reset_parameters()
 
     @torch.no_grad()
     def num_parameters(self) -> int:
@@ -581,10 +541,8 @@ class GraphTransformerNet(nn.Module):
             current_config = self.get_config()
             if saved_config != current_config:
                 logger.warning(
-                    "Architecture mismatch between checkpoint and model. "
-                    "Saved: %s, Current: %s",
-                    saved_config,
-                    current_config,
+                    f"Architecture mismatch between checkpoint and model. "
+                    f"Saved: {saved_config}, Current: {current_config}"
                 )
 
         self.load_state_dict(checkpoint["model_state_dict"], strict=strict)

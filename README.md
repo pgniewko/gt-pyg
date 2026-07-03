@@ -72,12 +72,13 @@ import torch
 from gt_pyg import GTConv
 
 num_nodes = 10
-num_node_features = 3
+hidden_dim = 15
 num_edges = 20
 num_edge_features = 2
 
-# Generate random node features
-x = torch.randn(num_nodes, num_node_features)
+# Generate random node features (GTConv operates in hidden_dim space;
+# use GraphTransformerNet to embed raw node features first)
+x = torch.randn(num_nodes, hidden_dim)
 
 # Generate random edge indices
 edge_index = torch.randint(high=num_nodes, size=(2, num_edges))
@@ -85,12 +86,18 @@ edge_index = torch.randint(high=num_nodes, size=(2, num_edges))
 # Generate random edge attributes (optional)
 edge_attr = torch.randn(num_edges, num_edge_features)
 
-gt = GTConv(node_in_dim=num_node_features,
+gt = GTConv(hidden_dim=hidden_dim,
             edge_in_dim=num_edge_features,
-            hidden_dim=15,
             num_heads=3)
 x_out, edge_out = gt(x=x, edge_index=edge_index, edge_attr=edge_attr)
 ```
+
+> **Changed after `v1.6.6b`:** `GTConv` takes a single `hidden_dim` (the
+> `node_in_dim` argument was removed), the multiplicative `e_gate`
+> attention-logit gate was removed (`gate=True` gates attention values only),
+> and the edge attention bias uses pre-normalized edge features. Models
+> trained with earlier versions produce different results, and `gate=True`
+> checkpoints must be loaded with `strict=False`.
 
 The code also supports custom datasets. For example, if you have a file called `solubility.csv`
 with columns `SMILES` and `logS`, you can prepare a `DataLoader` object as follows:
@@ -120,7 +127,9 @@ The `examples/` directory contains training and evaluation notebooks for the
 
 > Notebook compatibility: the notebooks below are pinned to the versions shown
 > in their headings. If a notebook says `v1.6.0` or `v1.6.1b`, run it from that
-> git tag; the current library API in this checkout may be newer.
+> git tag; the current library API in this checkout may be newer. The model
+> changed after `v1.6.6b` (see USAGE above), so re-running the notebooks on the
+> current version produces different results.
 
 ### Single-task models (`v1.6.0`)
 

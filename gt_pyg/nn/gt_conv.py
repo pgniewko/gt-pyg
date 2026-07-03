@@ -11,13 +11,12 @@ from torch_geometric.nn.aggr import MultiAggregation
 
 # GT-PyG
 from .mlp import MLP
-from .utils import validate_aggregators, validate_dropout
+from .utils import make_norm, validate_aggregators, validate_dropout
 
 
 class GTConv(MessagePassing):
     def __init__(
         self,
-        node_in_dim: int,
         hidden_dim: int,
         edge_in_dim: Optional[int] = None,
         num_heads: int = 8,
@@ -29,24 +28,25 @@ class GTConv(MessagePassing):
         aggregators: Optional[List[str]] = None,
     ):
         """
-        Graph Transformer Convolution (GTConv) module. 
+        Graph Transformer Convolution (GTConv) module.
 
         - Pre-norm residual blocks for attention and FFN.
         - Wider, deeper FFNs by default.
         - Edge features contribute both as additive attention bias and to values.
-        - Optional gating on values and logits.
+        - Optional sigmoid gating on attention values.
 
         Args:
-            node_in_dim (int): Dimensionality of the input node features.
-            hidden_dim (int): Dimensionality of the hidden representations (per layer).
+            hidden_dim (int): Dimensionality of the node features and hidden
+                representations (input and output of the layer).
             edge_in_dim (int, optional): Dimensionality of the input edge features.
-            num_heads (int, optional): Number of attention heads. Default is 8.
-            gate (bool, optional): Use a gate attention mechanism. Default is False.
-            qkv_bias (bool, optional): Bias in the attention projections. Default is False.
-            dropout (float, optional): Dropout probability. Default is 0.1.
-            norm (str, optional): "bn" or "ln" (BatchNorm/LayerNorm). Default is "ln".
-            act (str, optional): Activation function name for FFNs. Default is "gelu".
-            aggregators (List[str], optional): MultiAggregation methods. Default ["sum"].
+            num_heads (int, optional): Number of attention heads. Defaults to ``8``.
+            gate (bool, optional): Sigmoid-gate the attention values per head
+                and channel. Defaults to ``False``.
+            qkv_bias (bool, optional): Bias in the attention projections. Defaults to ``False``.
+            dropout (float, optional): Dropout probability. Defaults to ``0.1``.
+            norm (str, optional): ``"bn"`` or ``"ln"`` (BatchNorm/LayerNorm). Defaults to ``"ln"``.
+            act (str, optional): Activation function name for FFNs. Defaults to ``"gelu"``.
+            aggregators (List[str], optional): MultiAggregation methods. Defaults to ``["sum"]``.
         """
         if aggregators is None:
             aggregators = ["sum"]
@@ -77,7 +77,6 @@ class GTConv(MessagePassing):
         self.hidden_dim = hidden_dim
         self.head_dim = hidden_dim // num_heads
 
-        self.node_in_dim = node_in_dim
         self.edge_in_dim = edge_in_dim
         self.dropout_p = dropout
         self.norm_type = norm.lower()
@@ -85,12 +84,12 @@ class GTConv(MessagePassing):
         self.qkv_bias = qkv_bias
 
         # Node projections
-        self.WQ = nn.Linear(node_in_dim, hidden_dim, bias=qkv_bias)
-        self.WK = nn.Linear(node_in_dim, hidden_dim, bias=qkv_bias)
-        self.WV = nn.Linear(node_in_dim, hidden_dim, bias=qkv_bias)
+        self.WQ = nn.Linear(hidden_dim, hidden_dim, bias=qkv_bias)
+        self.WK = nn.Linear(hidden_dim, hidden_dim, bias=qkv_bias)
+        self.WV = nn.Linear(hidden_dim, hidden_dim, bias=qkv_bias)
 
         # Node output projection (after aggregation over heads & aggregators)
-        self.WO = nn.Linear(hidden_dim * self.num_aggrs, node_in_dim, bias=True)
+        self.WO = nn.Linear(hidden_dim * self.num_aggrs, hidden_dim, bias=True)
 
         # Edge-related modules
         if edge_in_dim is not None:
@@ -113,62 +112,29 @@ class GTConv(MessagePassing):
                 act=act,
             )
 
-            if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
-                self.norm0e = nn.BatchNorm1d(edge_in_dim)
-            elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
-                self.norm0e = nn.LayerNorm(edge_in_dim)
-            else:
-                raise ValueError(f"Unknown norm type: {norm}")
-
-
-            if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
-                self.norm1e = nn.BatchNorm1d(edge_in_dim)
-            elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
-                self.norm1e = nn.LayerNorm(edge_in_dim)
-            else:
-                raise ValueError(f"Unknown norm type: {norm}")
+            self.norm0e = make_norm(norm, edge_in_dim)  # pre-attn (edges)
+            self.norm1e = make_norm(norm, edge_in_dim)  # pre-FFN (edges)
         else:
             # No edge features
-            self.WE_logits = self.register_parameter("WE_logits", None)
-            self.WE_value = self.register_parameter("WE_value", None)
-            self.WOe = self.register_parameter("WOe", None)
-            self.ffn_e = self.register_parameter("ffn_e", None)
-            self.norm0e = self.register_parameter("norm0e", None)
-            self.norm1e = self.register_parameter("norm1e", None)
+            self.WE_logits = self.WE_value = self.WOe = None
+            self.ffn_e = self.norm0e = self.norm1e = None
 
         # Node norms (pre-attention and pre-FFN)
-        if self.norm_type in ["bn", "batchnorm", "batch_norm"]:
-            self.norm1 = nn.BatchNorm1d(node_in_dim)  # pre-attn
-            self.norm2 = nn.BatchNorm1d(node_in_dim)  # pre-FFN
-        elif self.norm_type in ["ln", "layernorm", "layer_norm"]:
-            self.norm1 = nn.LayerNorm(node_in_dim)    # pre-attn
-            self.norm2 = nn.LayerNorm(node_in_dim)    # pre-FFN
-        else:
-            raise ValueError(f"Unknown norm type: {norm}")
+        self.norm1 = make_norm(norm, hidden_dim)  # pre-attn
+        self.norm2 = make_norm(norm, hidden_dim)  # pre-FFN
 
-        # Gating (optional)
-        if gate:
-            # Node gate: gate values per head & channel
-            self.n_gate = nn.Linear(node_in_dim, hidden_dim, bias=True)
-            # Edge gate: gate attention logits per head (scalar per head)
-            if edge_in_dim is not None:
-                self.e_gate = nn.Linear(edge_in_dim, num_heads, bias=True)
-            else:
-                self.e_gate = self.register_parameter("e_gate", None)
-        else:
-            self.n_gate = self.register_parameter("n_gate", None)
-            self.e_gate = self.register_parameter("e_gate", None)
+        # Gating (optional): gate values per head & channel
+        self.n_gate = nn.Linear(hidden_dim, hidden_dim, bias=True) if gate else None
 
         # Dropouts
         self.dropout_layer = nn.Dropout(p=dropout)
         self.attn_dropout = nn.Dropout(p=dropout)
 
-        # Stronger node FFN: 2–4x expansion
-        node_ffn_hidden = max(hidden_dim, 4 * node_in_dim)
+        # Stronger node FFN: 4x expansion
         self.ffn = MLP(
-            input_dim=node_in_dim,
-            output_dim=node_in_dim,
-            hidden_dims=node_ffn_hidden,
+            input_dim=hidden_dim,
+            output_dim=hidden_dim,
+            hidden_dims=4 * hidden_dim,
             num_hidden_layers=2,
             dropout=dropout,
             act=act,
@@ -179,100 +145,41 @@ class GTConv(MessagePassing):
     def reset_parameters(self):
         """
         Initialize all learnable parameters.
+
+        Linear projections use Xavier uniform with zero bias; norms and FFNs
+        are reset via their own ``reset_parameters``.
         """
-        # Q, K, V, O
-        nn.init.xavier_uniform_(self.WQ.weight)
-        if self.WQ.bias is not None:
-            nn.init.zeros_(self.WQ.bias)
+        linears = [
+            self.WQ, self.WK, self.WV, self.WO,
+            self.WE_logits, self.WE_value, self.WOe,
+            self.n_gate,
+        ]
+        for lin in linears:
+            if lin is not None:
+                nn.init.xavier_uniform_(lin.weight)
+                if lin.bias is not None:
+                    nn.init.zeros_(lin.bias)
 
-        nn.init.xavier_uniform_(self.WK.weight)
-        if self.WK.bias is not None:
-            nn.init.zeros_(self.WK.bias)
-
-        nn.init.xavier_uniform_(self.WV.weight)
-        if self.WV.bias is not None:
-            nn.init.zeros_(self.WV.bias)
-
-        nn.init.xavier_uniform_(self.WO.weight)
-        if self.WO.bias is not None:
-            nn.init.zeros_(self.WO.bias)
-
-        # Edge-related
-        if self.edge_in_dim is not None:
-            nn.init.xavier_uniform_(self.WE_logits.weight)
-            if self.WE_logits.bias is not None:
-                nn.init.zeros_(self.WE_logits.bias)
-
-            nn.init.xavier_uniform_(self.WE_value.weight)
-            if self.WE_value.bias is not None:
-                nn.init.zeros_(self.WE_value.bias)
-
-            nn.init.xavier_uniform_(self.WOe.weight)
-            if self.WOe.bias is not None:
-                nn.init.zeros_(self.WOe.bias)
-
-        # Gates
-        if self.gate and self.n_gate is not None:
-            nn.init.xavier_uniform_(self.n_gate.weight)
-            if self.n_gate.bias is not None:
-                nn.init.zeros_(self.n_gate.bias)
-
-        if self.gate and self.e_gate is not None and not isinstance(self.e_gate, torch.nn.Parameter):
-            nn.init.xavier_uniform_(self.e_gate.weight)
-            if self.e_gate.bias is not None:
-                nn.init.zeros_(self.e_gate.bias)
-
-        # Node norms
-        if isinstance(self.norm1, nn.BatchNorm1d):
-            self.norm1.reset_running_stats()
-            nn.init.ones_(self.norm1.weight)
-            nn.init.zeros_(self.norm1.bias)
-        elif isinstance(self.norm1, nn.LayerNorm):
-            nn.init.ones_(self.norm1.weight)
-            nn.init.zeros_(self.norm1.bias)
-
-        if isinstance(self.norm2, nn.BatchNorm1d):
-            self.norm2.reset_running_stats()
-            nn.init.ones_(self.norm2.weight)
-            nn.init.zeros_(self.norm2.bias)
-        elif isinstance(self.norm2, nn.LayerNorm):
-            nn.init.ones_(self.norm2.weight)
-            nn.init.zeros_(self.norm2.bias)
-
-        # Edge norms
-        if self.edge_in_dim is not None:
-            if isinstance(self.norm0e, nn.BatchNorm1d):
-                self.norm0e.reset_running_stats()
-                nn.init.ones_(self.norm0e.weight)
-                nn.init.zeros_(self.norm0e.bias)
-            elif isinstance(self.norm0e, nn.LayerNorm):
-                nn.init.ones_(self.norm0e.weight)
-                nn.init.zeros_(self.norm0e.bias)
-
-            if isinstance(self.norm1e, nn.BatchNorm1d):
-                self.norm1e.reset_running_stats()
-                nn.init.ones_(self.norm1e.weight)
-                nn.init.zeros_(self.norm1e.bias)
-            elif isinstance(self.norm1e, nn.LayerNorm):
-                nn.init.ones_(self.norm1e.weight)
-                nn.init.zeros_(self.norm1e.bias)
+        # Norms reset to weight=1, bias=0 (+ running stats for BatchNorm)
+        for norm in [self.norm1, self.norm2, self.norm0e, self.norm1e]:
+            if norm is not None:
+                norm.reset_parameters()
 
         # FFNs
-        if hasattr(self.ffn, "reset_parameters"):
-            self.ffn.reset_parameters()
-        if self.edge_in_dim is not None and hasattr(self.ffn_e, "reset_parameters"):
+        self.ffn.reset_parameters()
+        if self.ffn_e is not None:
             self.ffn_e.reset_parameters()
 
     def forward(self, x, edge_index, edge_attr=None):
         """
         Args:
-            x: [N, node_in_dim]
-            edge_index: [2, E]
-            edge_attr: [E, edge_in_dim] or None
+            x: Node features ``[N, hidden_dim]``.
+            edge_index: COO edges ``[2, E]``.
+            edge_attr: Edge features ``[E, edge_in_dim]``, or ``None``.
 
         Returns:
-            updated_x: [N, node_in_dim]
-            updated_edge_attr (or None): [E, edge_in_dim]
+            Tuple of updated node features ``[N, hidden_dim]`` and updated edge
+            features ``[E, edge_in_dim]`` (``None`` if the layer has no edges).
         """
         if self.edge_in_dim is not None and edge_attr is None:
             raise ValueError(
@@ -295,16 +202,25 @@ class GTConv(MessagePassing):
         else:
             G = None
 
-        # Pre-compute edge value projection for use in message() and edge update
+        # Pre-compute edge projections for use in message() and the edge
+        # update. All edge contributions consume the pre-normed features,
+        # consistent with the pre-norm design of the node path.
         if self.edge_in_dim is not None and edge_attr is not None:
             edge_attr_norm = self.norm0e(edge_attr)
             E_val = self.WE_value(edge_attr_norm).view(-1, self.num_heads, self.head_dim)
         else:
+            edge_attr_norm = None
             E_val = None
+
+        # Scaled Q.K products per edge, computed once and shared by the
+        # attention logits (in message()) and the edge update.
+        # In source_to_target flow: Q_i=target=edge_index[1], K_j=source=edge_index[0]
+        src, dst = edge_index[0], edge_index[1]
+        qk = (Q[dst] * K[src]) / math.sqrt(self.head_dim)  # [E, H, Dh]
 
         # Message passing / attention aggregation
         out = self.propagate(
-            edge_index, Q=Q, K=K, V=V, G=G, edge_attr=edge_attr,
+            edge_index, qk=qk, V=V, G=G, edge_attr=edge_attr_norm,
             E_val=E_val, size=None,
         )
         out = out.view(-1, self.hidden_dim * self.num_aggrs)  # [N, hidden_dim * num_aggrs]
@@ -324,12 +240,8 @@ class GTConv(MessagePassing):
         if self.edge_in_dim is None or edge_attr is None:
             edge_out = edge_attr
         else:
-            # Compute edge representation: (Q_dst * K_src / sqrt(d_h)) * E_val
-            # In source_to_target flow: Q_i=target=edge_index[1], K_j=source=edge_index[0]
-            src, dst = edge_index[0], edge_index[1]
-            eij = (Q[dst] * K[src]) / math.sqrt(self.head_dim)    # [E, H, Dh]
-            eij = eij * E_val                                     # [E, H, Dh]
-
+            # Edge representation from the shared Q.K products: qk * E_val
+            eij = qk * E_val                           # [E, H, Dh]
             e_context = eij.view(-1, self.hidden_dim)  # [E, hidden_dim]
             e_attn = self.WOe(e_context)               # [E, edge_in_dim]
             e_attn = self.dropout_layer(e_attn)
@@ -342,49 +254,33 @@ class GTConv(MessagePassing):
 
         return x_out, edge_out
 
-    def message(self, Q_i, K_j, V_j, G_j, index, edge_attr=None, E_val=None):
+    def message(self, V_j, G_j, qk, index, edge_attr=None, E_val=None):
         """
         Compute messages on edges.
 
-        Q_i: [E, H, Dh]
-        K_j: [E, H, Dh]
-        V_j: [E, H, Dh]
-        G_j: [E, H, Dh] or None
-        edge_attr: [E, edge_in_dim] or None
-        E_val: [E, H, Dh] or None
+        Args:
+            V_j: Per-edge value vectors ``[E, H, Dh]``.
+            G_j: Per-edge gate vectors ``[E, H, Dh]``, or ``None``.
+            qk: Scaled Q.K products ``[E, H, Dh]`` (pre-computed in ``forward``).
+            index: Target-node index used for the attention softmax.
+            edge_attr: Pre-normed edge features ``[E, edge_in_dim]``, or ``None``.
+            E_val: Edge value contribution ``[E, H, Dh]``, or ``None``.
 
         Returns:
-            Tensor: Attention-weighted values [E, H, Dh].
+            Tensor: Attention-weighted values ``[E, H, Dh]``.
         """
-        Dh = self.head_dim
-
-        # Base logits from QK
-        logits_vec = (Q_i * K_j) / math.sqrt(Dh)  # [E, H, Dh]
-
-        # Edge contributions
-        if self.edge_in_dim is not None and edge_attr is not None:
-            # Additive bias to attention logits (per head)
-            E_bias = self.WE_logits(edge_attr)  # [E, H]
-            # Edge contribution to values (pre-computed in forward())
-            if E_val is not None:
-                V_j = V_j + E_val
-        else:
-            E_bias = 0.0
+        # Edge contribution to values (pre-computed in forward())
+        if E_val is not None:
+            V_j = V_j + E_val
 
         # Gating on values (nodes)
         if self.gate and G_j is not None:
             V_j = V_j * torch.sigmoid(G_j)
 
-        # Combine logits and biases
-        logits = logits_vec.sum(dim=-1)  # [E, H]
-        if isinstance(E_bias, torch.Tensor):
-            logits = logits + E_bias  # [E, H]
-
-        # Optional edge-dependent gating on logits
-        if self.gate and self.e_gate is not None and edge_attr is not None:
-            # Gate per-head logits
-            e_gate = self.e_gate(edge_attr)  # [E, H]
-            logits = logits * torch.sigmoid(e_gate)
+        # Attention logits: QK product plus additive edge bias (per head)
+        logits = qk.sum(dim=-1)  # [E, H]
+        if edge_attr is not None:
+            logits = logits + self.WE_logits(edge_attr)  # [E, H]
 
         # Attention weights
         alpha = softmax(logits, index)  # [E, H]
@@ -395,7 +291,7 @@ class GTConv(MessagePassing):
     def __repr__(self) -> str:
         aggrs = ",".join(self.aggregators)
         return (
-            f"{self.__class__.__name__}({self.node_in_dim}, "
+            f"{self.__class__.__name__}("
             f"{self.hidden_dim}, heads={self.num_heads}, "
             f"aggrs: {aggrs}, "
             f"qkv_bias: {self.qkv_bias}, "

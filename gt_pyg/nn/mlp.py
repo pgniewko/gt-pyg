@@ -26,17 +26,17 @@ class MLP(nn.Module):
             output_dim (int): Dimensionality of the output features.
             hidden_dims (Union[int, List[int]]): Hidden layer dimensions.
                 If int, the same hidden dimension is used for all hidden layers.
-            num_hidden_layers (int, optional): Number of hidden layers. Default is 1.
-                If 0, the MLP degenerates to a single Linear(input_dim, output_dim).
-            dropout (float, optional): Dropout probability. Default is 0.0.
-            act (str, optional): Activation function name. Default is "gelu".
+            num_hidden_layers (int, optional): Number of hidden layers. Defaults to ``1``.
+                If ``0``, the MLP degenerates to a single ``Linear(input_dim, output_dim)``.
+            dropout (float, optional): Dropout probability. Defaults to ``0.0``.
+            act (str, optional): Activation function name. Defaults to ``"gelu"``.
             act_kwargs (Dict[str, Any], optional): Additional arguments for the
-                activation function. Default is None.
-            norm (bool, optional): If True, add LayerNorm after each hidden Linear
-                (before activation). Not applied to the output layer. Default is False.
-            residual (bool, optional): If True, add residual connections around
+                activation function. Defaults to ``None``.
+            norm (bool, optional): If ``True``, add LayerNorm after each hidden Linear
+                (before activation). Not applied to the output layer. Defaults to ``False``.
+            residual (bool, optional): If ``True``, add residual connections around
                 hidden blocks where input and output dimensions match. Not applied
-                to the output layer. Default is False.
+                to the output layer. Defaults to ``False``.
         """
         super().__init__()
 
@@ -162,10 +162,10 @@ class MLP(nn.Module):
         Forward pass of the MLP module.
 
         Args:
-            x (Tensor): Input tensor of shape [..., input_dim].
+            x (Tensor): Input tensor of shape ``[..., input_dim]``.
 
         Returns:
-            Tensor: Output tensor of shape [..., output_dim].
+            Tensor: Output tensor of shape ``[..., output_dim]``.
         """
         for i, block in enumerate(self.blocks):
             if self.residual and self._can_residual[i]:

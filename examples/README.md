@@ -3,6 +3,13 @@
 > Notebook compatibility: these notebooks are version-pinned. If a notebook
 > says `v1.6.0` or `v1.6.1b`, run it from that git tag; current `HEAD` may
 > expose newer APIs.
+>
+> The model changed after `v1.6.6b`: `GTConv` takes a single `hidden_dim` (the
+> `node_in_dim` argument was removed), the multiplicative `e_gate`
+> attention-logit gate was removed (`gate=True` gates attention values only),
+> and the edge attention bias uses pre-normalized edge features. Re-running
+> these notebooks on a later version produces different results, and `gate=True`
+> checkpoints saved with earlier versions must be loaded with `strict=False`.
 
 - [OpenADMET-LogD.ipynb](OpenADMET-LogD.ipynb) — A simple example of how to train and evaluate a Graph Transformer model on the OpenADMET LogD endpoint using `gt-pyg`.
 - [train_logd.ipynb](train_logd.ipynb) — Single-task training for **LogD** prediction (tag `v1.6.0`).
