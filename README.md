@@ -119,7 +119,7 @@ The `examples/` directory contains training and evaluation notebooks for the
 
 > Notebook compatibility: the notebooks below are pinned to the versions shown
 > in their headings. If a notebook says `v1.6.0` or `v1.6.1b`, run it from that
-> git tag; the current library API in this checkout may be newer. 
+> git tag; the current library API in this checkout may be newer.
 
 ### Single-task models (`v1.6.0`)
 
