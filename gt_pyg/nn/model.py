@@ -187,7 +187,6 @@ class GraphTransformerNet(nn.Module):
         if self.edge_emb is not None:
             nn.init.xavier_uniform_(self.edge_emb.weight)
 
-        # Norms and children (BatchNorm1d/LayerNorm reset to weight=1, bias=0)
         self.input_norm.reset_parameters()
         self.readout_norm.reset_parameters()
         for m in self.gt_layers:
