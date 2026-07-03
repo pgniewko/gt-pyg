@@ -70,7 +70,7 @@ def standardize_smiles(smiles: str) -> Optional[str]:
             return None
         return Chem.MolToSmiles(parent_mol, canonical=True)
     except Exception as e:
-        logger.warning("ChEMBL standardization failed for '%s': %s", smiles, e)
+        logger.warning(f"ChEMBL standardization failed for '{smiles}': {e}")
         return None
 
 
@@ -84,10 +84,10 @@ def _canonicalize_mol(
 
     Args:
         smiles (str): Input SMILES string.
-        keep_stereo (bool, optional): Preserve stereochemistry. Defaults to True.
-        keep_charges (bool, optional): Preserve formal charges. Defaults to True.
+        keep_stereo (bool, optional): Preserve stereochemistry. Defaults to ``True``.
+        keep_charges (bool, optional): Preserve formal charges. Defaults to ``True``.
         keep_largest_fragment (bool, optional): Keep only the largest fragment.
-            Defaults to True.
+            Defaults to ``True``.
 
     Returns:
         Optional[Chem.Mol]: Canonicalized molecule, or None if parsing fails.
@@ -128,9 +128,8 @@ def _canonicalize_mol(
                     new_hcount = hcount - chg
                     if new_hcount < 0:
                         logger.warning(
-                            "Charge neutralization would set negative H count "
-                            "(%d) on atom %d; clamping to 0",
-                            new_hcount, at_idx,
+                            f"Charge neutralization would set negative H count "
+                            f"({new_hcount}) on atom {at_idx}; clamping to 0"
                         )
                         new_hcount = 0
                     atom.SetNumExplicitHs(new_hcount)
@@ -158,11 +157,11 @@ def canonicalize_smiles(
     Args:
         smiles (str): Input SMILES string.
         keep_stereo (bool, optional): Preserve stereochemistry (@, @@, /, \\).
-            Defaults to True.
+            Defaults to ``True``.
         keep_charges (bool, optional): Preserve formal charges ([NH4+], [O-], etc.).
-            Defaults to True.
+            Defaults to ``True``.
         keep_largest_fragment (bool, optional): Keep only the largest fragment
-            by heavy atom count (removes salts/counterions). Defaults to True.
+            by heavy atom count (removes salts/counterions). Defaults to ``True``.
 
     Returns:
         Optional[str]: Canonical SMILES string, or None if parsing fails.
@@ -315,7 +314,7 @@ def _mol_to_graph_tensors(
         gnm_diag = get_gnm_encodings(adjacency)
     except Exception:
         logger.warning(
-            "GNM computation failed for molecule with %d atoms; using zeros", n,
+            f"GNM computation failed for molecule with {n} atoms; using zeros"
         )
         gnm_diag = np.zeros(n, dtype=float)
 
@@ -495,27 +494,22 @@ def get_tensor_data(
         try:
             rdPartialCharges.ComputeGasteigerCharges(mol)
         except Exception as e:
+            reason = f"Gasteiger charge computation failed: {e}"
             logger.warning(
-                "Skipping compound due to invalid Gasteiger charges: "
-                "compound_id=%r row=%d smiles=%r reason=%s. "
-                "Consider removing this compound from the dataset.",
-                compound_id,
-                row,
-                smiles,
-                f"Gasteiger charge computation failed: {e}",
+                f"Skipping compound due to invalid Gasteiger charges: "
+                f"compound_id={compound_id!r} row={row} smiles={smiles!r} "
+                f"reason={reason}. "
+                f"Consider removing this compound from the dataset."
             )
             continue
 
         invalid_reason = _summarize_invalid_gasteiger_charges(mol)
         if invalid_reason is not None:
             logger.warning(
-                "Skipping compound due to invalid Gasteiger charges: "
-                "compound_id=%r row=%d smiles=%r reason=%s. "
-                "Consider removing this compound from the dataset.",
-                compound_id,
-                row,
-                smiles,
-                invalid_reason,
+                f"Skipping compound due to invalid Gasteiger charges: "
+                f"compound_id={compound_id!r} row={row} smiles={smiles!r} "
+                f"reason={invalid_reason}. "
+                f"Consider removing this compound from the dataset."
             )
             continue
 

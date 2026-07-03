@@ -72,12 +72,12 @@ import torch
 from gt_pyg import GTConv
 
 num_nodes = 10
-num_node_features = 3
+hidden_dim = 15
 num_edges = 20
 num_edge_features = 2
 
 # Generate random node features
-x = torch.randn(num_nodes, num_node_features)
+x = torch.randn(num_nodes, hidden_dim)
 
 # Generate random edge indices
 edge_index = torch.randint(high=num_nodes, size=(2, num_edges))
@@ -85,9 +85,8 @@ edge_index = torch.randint(high=num_nodes, size=(2, num_edges))
 # Generate random edge attributes (optional)
 edge_attr = torch.randn(num_edges, num_edge_features)
 
-gt = GTConv(node_in_dim=num_node_features,
+gt = GTConv(hidden_dim=hidden_dim,
             edge_in_dim=num_edge_features,
-            hidden_dim=15,
             num_heads=3)
 x_out, edge_out = gt(x=x, edge_index=edge_index, edge_attr=edge_attr)
 ```

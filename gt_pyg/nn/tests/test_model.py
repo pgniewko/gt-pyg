@@ -215,6 +215,15 @@ def test_get_config(model):
     assert len(model2.gt_layers) == len(model.gt_layers)
 
 
+def test_config_keys_match_init_signature(model):
+    """_config is captured via locals() in __init__; guard against locals
+    defined before the capture leaking into (or args missing from) the config."""
+    import inspect
+
+    init_args = set(inspect.signature(GraphTransformerNet.__init__).parameters) - {"self"}
+    assert set(model.get_config()) == init_args
+
+
 # ---- Forward Pass API Tests ----
 
 def test_forward_training_samples_and_eval_is_deterministic(sample_input):

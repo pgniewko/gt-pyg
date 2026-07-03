@@ -1,6 +1,8 @@
 from numbers import Real
 from typing import Sequence
 
+from torch import nn
+
 
 VALID_AGGREGATORS = frozenset(
     {
@@ -17,6 +19,16 @@ VALID_AGGREGATORS = frozenset(
         "median",
     }
 )
+
+
+def make_norm(norm: str, dim: int) -> nn.Module:
+    """Create a BatchNorm1d ("bn") or LayerNorm ("ln") module of size ``dim``."""
+    key = norm.lower()
+    if key in ("bn", "batchnorm", "batch_norm"):
+        return nn.BatchNorm1d(dim)
+    if key in ("ln", "layernorm", "layer_norm"):
+        return nn.LayerNorm(dim)
+    raise ValueError(f"Unknown norm type: {norm}")
 
 
 def validate_dropout(name: str, value: float) -> None:

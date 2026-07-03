@@ -135,8 +135,8 @@ def one_hot_encoding(x: Union[str, int, Any], permitted_list: List) -> List[int]
     """
     if x not in permitted_list:
         logger.debug(
-            "Unknown value %r mapped to catch-all %r in one_hot_encoding",
-            x, permitted_list[-1],
+            f"Unknown value {x!r} mapped to catch-all {permitted_list[-1]!r} "
+            f"in one_hot_encoding"
         )
         x = permitted_list[-1]
     return [int(x == s) for s in permitted_list]
@@ -155,7 +155,7 @@ def get_gasteiger_charge(atom: Chem.Atom, clip: float = 2.0) -> float:
 
     Args:
         atom (Chem.Atom): RDKit atom (must have _GasteigerCharge property).
-        clip (float, optional): Clipping range. Defaults to 2.0.
+        clip (float, optional): Clipping range. Defaults to ``2.0``.
 
     Returns:
         float: Normalized Gasteiger charge in [-1, 1], or 0.0 if unavailable.
@@ -163,20 +163,17 @@ def get_gasteiger_charge(atom: Chem.Atom, clip: float = 2.0) -> float:
     try:
         charge = float(atom.GetDoubleProp("_GasteigerCharge"))
         if np.isnan(charge) or np.isinf(charge):
+            kind = "NaN" if np.isnan(charge) else "Inf"
             logger.warning(
-                "Gasteiger charge is %s for atom %s (idx %d); defaulting to 0.0",
-                "NaN" if np.isnan(charge) else "Inf",
-                atom.GetSymbol(),
-                atom.GetIdx(),
+                f"Gasteiger charge is {kind} for atom {atom.GetSymbol()} "
+                f"(idx {atom.GetIdx()}); defaulting to 0.0"
             )
             return 0.0
         return np.clip(charge, -clip, clip) / clip
     except Exception as e:
         logger.warning(
-            "Failed to retrieve Gasteiger charge for atom %s (idx %d): %s",
-            atom.GetSymbol(),
-            atom.GetIdx(),
-            e,
+            f"Failed to retrieve Gasteiger charge for atom {atom.GetSymbol()} "
+            f"(idx {atom.GetIdx()}): {e}"
         )
         return 0.0
 
@@ -252,7 +249,7 @@ def get_period(atomic_num: int) -> int:
     # Period 7: Fr(87) onwards
     if atomic_num <= 0:
         logger.warning(
-            "Dummy/invalid atomic number %d mapped to period 0", atomic_num,
+            f"Dummy/invalid atomic number {atomic_num} mapped to period 0"
         )
         return 0
     elif atomic_num <= 2:
