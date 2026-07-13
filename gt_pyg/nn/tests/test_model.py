@@ -513,3 +513,67 @@ def test_head_dropout_saved_in_config():
     m2 = GraphTransformerNet.from_config(config)
     assert m2.readout_dropout.p == 0.3
     assert m2.mu_mlp.dropout_p == 0.3
+
+
+# ---- Trainable Readout Tests ----
+
+TRAINABLE_AGGRS = ["attn", "softmax", "powermean"]
+
+
+def _make_pool_model(aggregators):
+    return GraphTransformerNet(
+        node_dim_in=16, edge_dim_in=8, hidden_dim=32,
+        num_gt_layers=2, num_heads=4, aggregators=aggregators,
+    )
+
+
+def test_trainable_readout_shapes_and_params(sample_input):
+    """Trainable aggregators produce params; each readout is hidden_dim wide."""
+    model = _make_pool_model(["sum", "attn", "softmax", "powermean"])
+    assert model.num_aggrs == 4
+
+    model.eval()
+    pred, log_var, latent = model(**sample_input, return_latent=True)
+    assert pred.shape == (1, 1)
+    assert latent.shape == (1, 4 * model.hidden_dim)
+
+    pool_params = dict(model.global_pool.named_parameters())
+    assert any("gate_nn" in k for k in pool_params)  # attn
+    assert pool_params["aggrs.2.t"].shape == (model.hidden_dim,)  # per-channel softmax
+    assert pool_params["aggrs.3.p"].shape == (model.hidden_dim,)  # per-channel powermean
+
+
+def test_trainable_readout_checkpoint_roundtrip(sample_input, tmp_path):
+    """Trained readout weights survive save/load with strict=True."""
+    model = _make_pool_model(TRAINABLE_AGGRS)
+    model.eval()
+    out1, _ = model(**sample_input)
+
+    model.save_checkpoint(tmp_path / "model.pt")
+    model2, _ = GraphTransformerNet.load_checkpoint(tmp_path / "model.pt", strict=True)
+    model2.eval()
+    out2, _ = model2(**sample_input)
+
+    assert torch.allclose(out1, out2)
+
+
+def test_trainable_readout_freeze(sample_input):
+    """Pooling component freezes/unfreezes and reports real status."""
+    model = _make_pool_model(["attn", "softmax"])
+    assert model.get_frozen_status()["pooling"] is False
+
+    model.freeze("pooling")
+    assert model.get_frozen_status()["pooling"] is True
+    assert all(not p.requires_grad for p in model.global_pool.parameters())
+
+    model.unfreeze("pooling")
+    assert model.get_frozen_status()["pooling"] is False
+
+
+def test_pool_only_aggregators_rejected_for_message_passing():
+    """attn is pooling-only: invalid as gt_aggregators."""
+    with pytest.raises(ValueError, match="gt_aggregators"):
+        GraphTransformerNet(
+            node_dim_in=16, hidden_dim=32, num_heads=4,
+            gt_aggregators=["attn"],
+        )
