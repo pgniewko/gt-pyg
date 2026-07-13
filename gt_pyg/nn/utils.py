@@ -20,6 +20,9 @@ VALID_AGGREGATORS = frozenset(
     }
 )
 
+# Trainable readouts only valid for graph-level pooling, not message passing.
+VALID_POOL_AGGREGATORS = VALID_AGGREGATORS | {"attn"}
+
 
 def make_norm(norm: str, dim: int) -> nn.Module:
     """Create a BatchNorm1d ("bn") or LayerNorm ("ln") module of size ``dim``."""
@@ -38,7 +41,11 @@ def validate_dropout(name: str, value: float) -> None:
         raise ValueError(f"{name} must be in [0, 1), got {value}")
 
 
-def validate_aggregators(name: str, aggregators: Sequence[str]) -> None:
+def validate_aggregators(
+    name: str,
+    aggregators: Sequence[str],
+    valid: frozenset = VALID_AGGREGATORS,
+) -> None:
     if isinstance(aggregators, (str, bytes)) or not isinstance(aggregators, (list, tuple)):
         raise ValueError(f"{name} must be a non-empty list or tuple of aggregator names")
     if len(aggregators) == 0:
@@ -50,14 +57,14 @@ def validate_aggregators(name: str, aggregators: Sequence[str]) -> None:
             raise ValueError(f"{name} entries must be strings, got {aggregator!r}")
         if aggregator == "":
             raise ValueError(f"{name} entries must be non-empty strings")
-        if aggregator not in VALID_AGGREGATORS:
+        if aggregator not in valid:
             invalid.append(aggregator)
 
     if invalid:
-        valid = ", ".join(sorted(VALID_AGGREGATORS))
+        valid_names = ", ".join(sorted(valid))
         raise ValueError(
             f"{name} contains unsupported aggregators {invalid!r}; "
-            f"valid aggregators are: {valid}"
+            f"valid aggregators are: {valid_names}"
         )
 
 

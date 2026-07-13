@@ -7,16 +7,38 @@ import torch
 logger = logging.getLogger(__name__)
 from torch import nn, Tensor
 from torch_geometric.data import Batch
-from torch_geometric.nn.aggr import MultiAggregation
+from torch_geometric.nn.aggr import (
+    AttentionalAggregation,
+    MultiAggregation,
+    PowerMeanAggregation,
+    SoftmaxAggregation,
+)
 
 from .gt_conv import GTConv
 from .mlp import MLP
 from .utils import (
+    VALID_POOL_AGGREGATORS,
     make_norm,
     validate_aggregators,
     validate_dropout,
     validate_num_gt_layers,
 )
+
+
+def _build_pool_aggr(name: str, hidden_dim: int) -> Union[str, nn.Module]:
+    """Resolve a pooling aggregator name to an aggregation for ``MultiAggregation``.
+
+    Trainable readouts: ``"attn"`` (gated attention over nodes) and per-channel
+    learnable ``"softmax"`` / ``"powermean"``.  All other names resolve to PyG's
+    parameter-free aggregations. Every readout outputs ``hidden_dim`` features.
+    """
+    if name == "attn":
+        return AttentionalAggregation(gate_nn=nn.Linear(hidden_dim, 1))
+    if name == "softmax":
+        return SoftmaxAggregation(learn=True, channels=hidden_dim)
+    if name == "powermean":
+        return PowerMeanAggregation(learn=True, channels=hidden_dim)
+    return name
 
 
 class GraphTransformerNet(nn.Module):
@@ -92,7 +114,7 @@ class GraphTransformerNet(nn.Module):
         validate_dropout("head_dropout", resolved_head_dropout)
         validate_num_gt_layers(num_gt_layers)
         validate_aggregators("gt_aggregators", gt_aggregators)
-        validate_aggregators("aggregators", aggregators)
+        validate_aggregators("aggregators", aggregators, valid=VALID_POOL_AGGREGATORS)
 
         if num_tasks <= 0:
             raise ValueError("num_tasks must be >= 1")
@@ -140,7 +162,8 @@ class GraphTransformerNet(nn.Module):
         )
 
         # ---- Global pooling and readout ----
-        self.global_pool = MultiAggregation(aggregators, mode="cat")
+        aggrs = [_build_pool_aggr(a, hidden_dim) for a in aggregators]
+        self.global_pool = MultiAggregation(aggrs, mode="cat")
         self.num_aggrs = len(aggregators)
         head_in_dim = self.num_aggrs * hidden_dim
 
@@ -189,6 +212,7 @@ class GraphTransformerNet(nn.Module):
 
         self.input_norm.reset_parameters()
         self.readout_norm.reset_parameters()
+        self.global_pool.reset_parameters()
         for m in self.gt_layers:
             m.reset_parameters()
         self.mu_mlp.reset_parameters()
