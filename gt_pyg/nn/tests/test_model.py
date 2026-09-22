@@ -227,7 +227,7 @@ def test_config_keys_match_init_signature(model):
 # ---- Forward Pass API Tests ----
 
 def test_forward_training_samples_and_eval_is_deterministic(sample_input):
-    """Training samples from the variance head; eval and zero_var return mu."""
+    """Training samples from the variance head; training and eval return mu."""
     torch.manual_seed(1234)
     model = GraphTransformerNet(
         node_dim_in=16,
@@ -250,7 +250,7 @@ def test_forward_training_samples_and_eval_is_deterministic(sample_input):
         train_pred1, train_log_var1 = model(**sample_input)
         train_pred2, train_log_var2 = model(**sample_input)
 
-    assert not torch.allclose(train_pred1, train_pred2)
+    assert torch.allclose(train_pred1, train_pred2)
     assert torch.allclose(train_log_var1, train_log_var2)
     assert torch.allclose(train_log_var1, torch.full_like(train_log_var1, 0.5))
 
@@ -263,26 +263,15 @@ def test_forward_training_samples_and_eval_is_deterministic(sample_input):
     assert torch.allclose(eval_log_var1, eval_log_var2)
     assert torch.allclose(eval_log_var1, torch.full_like(eval_log_var1, 0.5))
 
-    model.train()
-    with torch.no_grad():
-        zero_var_pred1, zero_var_log_var1 = model(**sample_input, zero_var=True)
-        zero_var_pred2, zero_var_log_var2 = model(**sample_input, zero_var=True)
-
-    assert torch.allclose(zero_var_pred1, zero_var_pred2)
-    assert torch.allclose(zero_var_pred1, eval_pred1)
-    assert torch.allclose(zero_var_log_var1, zero_var_log_var2)
-    assert torch.allclose(zero_var_log_var1, torch.full_like(zero_var_log_var1, 0.5))
-
 
 def test_forward_return_latent_is_opt_in_and_backward_compatible(model, sample_input):
     """Default outputs remain unchanged when latent return is requested."""
     model.eval()
 
     with torch.no_grad():
-        out1, log_var1 = model(**sample_input, zero_var=True)
+        out1, log_var1 = model(**sample_input)
         out2, log_var2, latent = model(
             **sample_input,
-            zero_var=True,
             return_latent=True,
         )
 
@@ -310,7 +299,6 @@ def test_forward_return_latent_returns_pre_dropout_embedding(model, sample_input
 
         _out, _log_var, latent = model(
             **sample_input,
-            zero_var=True,
             return_latent=True,
         )
 
