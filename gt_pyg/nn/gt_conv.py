@@ -20,6 +20,7 @@ class GTConv(MessagePassing):
         hidden_dim: int,
         edge_in_dim: Optional[int] = None,
         num_heads: int = 8,
+        num_ffn_layers: int = 1,
         gate: bool = False,
         qkv_bias: bool = False,
         dropout: float = 0.1,
@@ -40,6 +41,8 @@ class GTConv(MessagePassing):
                 representations (input and output of the layer).
             edge_in_dim (int, optional): Dimensionality of the input edge features.
             num_heads (int, optional): Number of attention heads. Defaults to ``8``.
+            num_ffn_layers (int, optional): Number of hidden layers in the node and
+                edge FFNs. Defaults to ``1``.
             gate (bool, optional): Sigmoid-gate the attention values per head
                 and channel. Defaults to ``False``.
             qkv_bias (bool, optional): Bias in the attention projections. Defaults to ``False``.
@@ -107,7 +110,7 @@ class GTConv(MessagePassing):
                 input_dim=edge_in_dim,
                 output_dim=edge_in_dim,
                 hidden_dims=edge_ffn_hidden,
-                num_hidden_layers=2,
+                num_hidden_layers=num_ffn_layers,
                 dropout=dropout,
                 act=act,
             )
@@ -135,7 +138,7 @@ class GTConv(MessagePassing):
             input_dim=hidden_dim,
             output_dim=hidden_dim,
             hidden_dims=4 * hidden_dim,
-            num_hidden_layers=2,
+            num_hidden_layers=num_ffn_layers,
             dropout=dropout,
             act=act,
         )
