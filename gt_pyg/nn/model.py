@@ -295,11 +295,8 @@ class GraphTransformerNet(nn.Module):
         g = self.readout_dropout(latent)
 
         # Heads
-        mu = self.mu_mlp(g)            # [B, T]
-        log_var = self.log_var_mlp(g)  # [B, T]
-
-        log_var = torch.clamp(log_var, min=-10.0, max=10.0)
-        pred = mu
+        pred = self.mu_mlp(g)  # [B, T]
+        log_var = torch.clamp(self.log_var_mlp(g), min=-10.0, max=10.0)  # [B, T]
 
         if return_latent:
             return pred, log_var, latent
