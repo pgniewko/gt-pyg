@@ -1,11 +1,11 @@
 import logging
-from typing import Optional, List, Tuple, Union, Dict, Any
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
 logger = logging.getLogger(__name__)
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch_geometric.data import Batch
 from torch_geometric.nn.aggr import (
     AttentionalAggregation,
@@ -14,6 +14,7 @@ from torch_geometric.nn.aggr import (
     SoftmaxAggregation,
 )
 
+from .checkpoint import load_checkpoint
 from .gt_conv import GTConv
 from .mlp import MLP
 from .utils import (
@@ -487,8 +488,6 @@ class GraphTransformerNet(nn.Module):
             extra: Additional user data.
             require_version: If True, reject checkpoints without usable provenance.
         """
-        from .checkpoint import save_checkpoint
-
         merged_extra = {"frozen_status": self.get_frozen_status()}
         if extra:
             merged_extra.update(extra)
@@ -528,8 +527,6 @@ class GraphTransformerNet(nn.Module):
         Returns:
             Tuple of (model, checkpoint_dict).
         """
-        from .checkpoint import load_checkpoint
-
         checkpoint = load_checkpoint(
             path, map_location=map_location, version_check=version_check,
         )
@@ -555,8 +552,6 @@ class GraphTransformerNet(nn.Module):
                 ``"warn"`` (default) logs a warning, ``"error"`` raises
                 :class:`RuntimeError`, ``"ignore"`` skips the check.
         """
-        from .checkpoint import load_checkpoint
-
         checkpoint = load_checkpoint(
             path, map_location=map_location, version_check=version_check,
         )

@@ -1,12 +1,13 @@
 """Checkpoint utilities for gt-pyg models."""
 
 import logging
-from typing import Dict, Any, Optional, Union
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, Optional, Union
 
 import torch
 
-from gt_pyg import __version__
+from .._version import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,6 @@ def save_checkpoint(
         extra: Additional data.
         require_version: If True, reject checkpoints without usable provenance.
     """
-    from datetime import datetime, timezone
-
     if not __version__ or __version__ == "0+unknown":
         msg = (
             "gt-pyg version is unknown; refusing to save checkpoint without "
