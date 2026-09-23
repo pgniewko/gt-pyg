@@ -472,7 +472,7 @@ class GraphTransformerNet(nn.Module):
         global_step: Optional[int] = None,
         best_metric: Optional[float] = None,
         extra: Optional[Dict[str, Any]] = None,
-        require_version: bool = True,
+        require_version: bool = False,
     ) -> None:
         """
         Save checkpoint to disk.
