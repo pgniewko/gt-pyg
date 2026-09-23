@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-
+import torch.nn as nn
 from gt_pyg.nn.gt_conv import GTConv
 
 
@@ -303,6 +303,15 @@ class TestConfiguration:
         """Default dropout should be 0.1 (synced with GraphTransformerNet)."""
         conv = GTConv(hidden_dim=32, num_heads=4)
         assert conv.dropout_p == 0.1
+
+    @pytest.mark.parametrize("num_ffn_layers", [1, 2, 3])
+    def test_num_ffn_layers(self, num_ffn_layers):
+        """num_ffn_layers should control the number of hidden layers in the FFN."""
+        conv = GTConv(hidden_dim=32, num_heads=4, num_ffn_layers=num_ffn_layers, edge_in_dim=8)
+
+        assert sum(isinstance(m, nn.Linear) for m in conv.ffn.modules())==num_ffn_layers + 1
+        assert conv.ffn_e is not None
+        assert sum(isinstance(m, nn.Linear) for m in conv.ffn_e.modules())==num_ffn_layers + 1
 
 
 # ---------------------------------------------------------------------------
