@@ -320,7 +320,6 @@ def get_atom_features(
     Includes:
         - Element, degree, formal charge, hybridization
         - In-ring flag, aromatic flag
-        - Atomic number (scalar)
         - Period (row) one-hot
         - Group / column one-hot
         - Ring membership statistics if provided:
@@ -378,9 +377,8 @@ def get_atom_features(
         + is_aromatic_enc
     )
 
-    # Atomic number, period, and group (column)
+    # period and group (column)
     atomic_num = atom.GetAtomicNum()
-    atom_feature_vector += [float(atomic_num)]
 
     period = get_period(atomic_num)
     period_enc = one_hot_encoding(period, PERIOD_CATEGORIES)
