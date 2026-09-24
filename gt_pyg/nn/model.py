@@ -14,7 +14,7 @@ from torch_geometric.nn.aggr import (
     SoftmaxAggregation,
 )
 
-from .checkpoint import load_checkpoint
+from .checkpoint import load_checkpoint, save_checkpoint
 from .gt_conv import GTConv
 from .mlp import MLP
 from .utils import (

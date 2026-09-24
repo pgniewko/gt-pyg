@@ -1,11 +1,13 @@
 """Public API contract tests for package-level exports."""
 
+import subprocess
+import sys
+
 import pytest
 
 import gt_pyg
 import gt_pyg.data
 import gt_pyg.nn
-
 
 README_TOP_LEVEL_EXPORTS = {
     "__version__",
@@ -57,3 +59,7 @@ def test_public_exports_are_accessible_from_modules(module):
     """Every public export should be accessible from its package module."""
     for name in module.__all__:
         assert hasattr(module, name), f"{module.__name__}.{name} is not exported"
+
+def test_checkpoint_module_is_importable():
+    """gt_pyg.nn.checkpoint should be importable without errors."""
+    subprocess.run([sys.executable, "-c", "import gt_pyg.nn.checkpoint"], check=True)
