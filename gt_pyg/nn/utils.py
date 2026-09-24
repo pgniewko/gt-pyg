@@ -24,13 +24,15 @@ VALID_AGGREGATORS = frozenset(
 VALID_POOL_AGGREGATORS = VALID_AGGREGATORS | {"attn"}
 
 
-def make_norm(norm: str, dim: int) -> nn.Module:
-    """Create a BatchNorm1d ("bn") or LayerNorm ("ln") module of size ``dim``."""
-    key = norm.lower()
+def make_norm(norm: str | None, dim: int) -> nn.Module:
+    """Create a BatchNorm1d ("bn"), LayerNorm ("ln"), or Identity ("none") module of size ``dim``"""
+    key = norm.lower() if norm is not None else None
     if key in ("bn", "batchnorm", "batch_norm"):
         return nn.BatchNorm1d(dim)
     if key in ("ln", "layernorm", "layer_norm"):
         return nn.LayerNorm(dim)
+    if key in ("none", None, "identity"):
+        return nn.Identity()
     raise ValueError(f"Unknown norm type: {norm}")
 
 

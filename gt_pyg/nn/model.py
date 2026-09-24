@@ -77,6 +77,7 @@ class GraphTransformerNet(nn.Module):
         edge_dim_in: Optional[int] = None,
         hidden_dim: int = 128,
         norm: str = "ln",
+        use_readout_norm: bool = False,
         gate: bool = False,
         qkv_bias: bool = False,
         num_gt_layers: int = 4,
@@ -170,7 +171,7 @@ class GraphTransformerNet(nn.Module):
         head_in_dim = self.num_aggrs * hidden_dim
 
         # Readout norm & dropout before heads
-        self.readout_norm = make_norm(norm, head_in_dim)
+        self.readout_norm = make_norm(norm if use_readout_norm else None, head_in_dim)
         self.readout_dropout = nn.Dropout(p=resolved_head_dropout)
 
         # Slightly stronger heads (still modest by default)
