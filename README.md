@@ -108,7 +108,7 @@ Notes:
 
 - Pass `y=None` to `get_tensor_data(...)` for inference-only graphs.
 - Multi-task labels may be sequences containing `None` or `np.nan`; `get_tensor_data(...)` adds a `y_mask` tensor so losses can ignore missing tasks.
-- Use `ids=` to attach stable compound identifiers to warnings when a row is skipped (for example, because RDKit/Gasteiger charge computation failed).
+- Use `ids=` to attach stable identifiers to compounds. Returned for mapping data to compounds and warnings when a row is skipped (for example, because RDKit/Gasteiger charge computation failed).
 
 ---
 

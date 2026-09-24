@@ -444,6 +444,7 @@ def get_tensor_data(
             - ``x`` (torch.FloatTensor): Node features ``[N, F]``.
             - ``edge_index`` (torch.LongTensor): COO edges ``[2, E]``.
             - ``edge_attr`` (torch.FloatTensor): Edge features ``[E, D]``.
+            - ``id`` (Any): Compound identifier.
             - ``y`` (torch.FloatTensor): Task targets ``[1, T]`` *(only when y is provided)*.
             - ``y_mask`` (torch.FloatTensor): Mask ``[1, T]`` *(only when y is provided)*.
 
@@ -530,6 +531,7 @@ def get_tensor_data(
             y_mask_arr = np.isfinite(y_arr).astype(np.float32)
             data.y = torch.as_tensor(y_arr, dtype=torch.float).unsqueeze(0)           # [1, T]
             data.y_mask = torch.as_tensor(y_mask_arr, dtype=torch.float).unsqueeze(0)  # [1, T]
+            data.id = compound_id
 
         data_list.append(data)
 
