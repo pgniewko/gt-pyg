@@ -164,6 +164,9 @@ class GraphTransformerNet(nn.Module):
             ]
         )
 
+        # Final normalization after GTConv stack
+        self.final_norm = make_norm(norm, hidden_dim)
+
         # ---- Global pooling and readout ----
         aggrs = [_build_pool_aggr(a, hidden_dim) for a in aggregators]
         self.global_pool = MultiAggregation(aggrs, mode="cat")
@@ -215,6 +218,7 @@ class GraphTransformerNet(nn.Module):
 
         self.input_norm.reset_parameters()
         self.readout_norm.reset_parameters()
+        self.final_norm.reset_parameters()
         self.global_pool.reset_parameters()
         for m in self.gt_layers:
             m.reset_parameters()
@@ -304,6 +308,9 @@ class GraphTransformerNet(nn.Module):
         for gt_layer in self.gt_layers:
             h, e = gt_layer(x=h, edge_index=edge_index, edge_attr=e)
 
+        # Final normalization
+        h = self.final_norm(h)
+
         # Global pooling
         batch_index = self._get_batch_index(batch)
         g = self.global_pool(h, batch_index)  # [B, num_aggrs * H]
@@ -334,7 +341,7 @@ class GraphTransformerNet(nn.Module):
     def _get_component_modules(self, name: str) -> List[nn.Module]:
         """Map component name to list of modules."""
         embeddings = [self.node_emb] + ([self.edge_emb] if self.edge_emb else [])
-        encoder = [self.input_norm, self.input_dropout] + list(self.gt_layers)
+        encoder = [self.input_norm, self.input_dropout] + list(self.gt_layers) + [self.final_norm]
         heads = [self.readout_norm, self.readout_dropout, self.mu_mlp, self.log_var_mlp]
         pooling = [self.global_pool]
 
