@@ -70,6 +70,7 @@ class GraphTransformerNet(nn.Module):
         edge_dim_in: Optional[int] = None,
         hidden_dim: int = 128,
         norm: str = "ln",
+        readout_norm: bool = False,
         gate: bool = False,
         qkv_bias: bool = False,
         num_gt_layers: int = 4,
@@ -163,7 +164,7 @@ class GraphTransformerNet(nn.Module):
         head_in_dim = self.num_aggrs * hidden_dim
 
         # Readout norm & dropout before heads
-        self.readout_norm = make_norm(norm, head_in_dim)
+        self.readout_norm = make_norm(norm, head_in_dim) if readout_norm else nn.Identity()
         self.readout_dropout = nn.Dropout(p=resolved_head_dropout)
 
         # Slightly stronger heads (still modest by default)
@@ -206,7 +207,8 @@ class GraphTransformerNet(nn.Module):
             nn.init.xavier_uniform_(self.edge_emb.weight)
 
         self.input_norm.reset_parameters()
-        self.readout_norm.reset_parameters()
+        if not isinstance(self.readout_norm, nn.Identity):
+            self.readout_norm.reset_parameters()
         self.global_pool.reset_parameters()
         for m in self.gt_layers:
             m.reset_parameters()
