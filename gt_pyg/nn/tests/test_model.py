@@ -577,3 +577,32 @@ def test_pool_only_aggregators_rejected_for_message_passing():
             node_dim_in=16, hidden_dim=32, num_heads=4,
             gt_aggregators=["attn"],
         )
+
+
+def test_readout_norm_defaults_to_identity():
+    """readout_norm defaults to nn.Identity (no normalization)."""
+    model = GraphTransformerNet(
+        node_dim_in=16, edge_dim_in=8, hidden_dim=32,
+        num_gt_layers=2, num_heads=4,
+    )
+    assert isinstance(model.readout_norm, torch.nn.Identity)
+
+
+@pytest.mark.parametrize(
+    ("norm", "readout_norm", "expected_cls"),
+    [
+        ("bn", True, torch.nn.BatchNorm1d),
+        ("ln", True, torch.nn.LayerNorm),
+        ("bn", False, torch.nn.Identity),
+        ("ln", False, torch.nn.Identity),
+    ],
+)
+def test_readout_norm_type(norm, readout_norm, expected_cls):
+    """readout_norm is created with the correct type based on config."""
+    model = GraphTransformerNet(
+        node_dim_in=16, edge_dim_in=8, hidden_dim=32,
+        num_gt_layers=2, num_heads=4,
+        norm=norm, readout_norm=readout_norm
+    )
+
+    assert isinstance(model.readout_norm, expected_cls)
