@@ -1,11 +1,12 @@
 """Tests for GraphTransformerNet freeze/unfreeze and checkpoint functionality."""
 
-import logging
 import importlib.metadata
+import logging
 from types import SimpleNamespace
 
 import pytest
 import torch
+from torch import nn
 
 import gt_pyg
 import gt_pyg._version as version_mod
@@ -128,12 +129,40 @@ def test_get_frozen_status_after_freeze_unfreeze(model):
 
 
 def test_batchnorm_eval(model):
-    """BatchNorm set to eval mode when frozen."""
+    """Frozen BatchNorm stays in eval mode even if model.train() is called."""
     model.train()
     model.freeze("encoder")
+    model.train()
 
     # Input norm should be in eval mode
     assert not model.input_norm.training
+
+def test_frozen_batchnorm_stats_unchanged(model, sample_input):
+    """Frozen BatchNorm layers do not update running stats during forward."""
+    model.train()
+    model.freeze("encoder")
+    model.train()
+
+    bn = model.input_norm
+    mean = bn.running_mean.clone()
+    var = bn.running_var.clone()
+    count = bn.num_batches_tracked.clone()
+
+    model(**sample_input)
+
+    assert torch.equal(bn.running_mean, mean)
+    assert torch.equal(bn.running_var, var)
+    assert torch.equal(bn.num_batches_tracked, count)
+
+def test_unfreeze_batchnorm_remains_eval(model):
+    """Unfreezing in eval mode does not change BatchNorm back to training mode."""
+    model.freeze("encoder")
+    model.eval()
+    model.unfreeze("encoder")
+
+    # Input norm should still be in eval mode
+    assert all(not m.training for m in model.modules() if isinstance(m, nn.modules.batchnorm._BatchNorm))
+
 
 
 def test_invalid_component(model):

@@ -194,6 +194,19 @@ class GraphTransformerNet(nn.Module):
         # Initialize everything
         self.reset_parameters()
 
+    def train(self, mode: bool = True) -> "GraphTransformerNet":
+        """Override ``nn.Module.train()`` to ensure BatchNorm layers are in eval mode when frozen."""
+        super().train(mode)
+        if not mode:
+            return self
+
+        for module in self.modules():
+            if isinstance(module, nn.modules.batchnorm._BatchNorm):
+                params = list(module.parameters(recurse=False))
+                if params and not any(p.requires_grad for p in params):
+                    module.eval()
+        return self
+
     def reset_parameters(self) -> None:
         """
         Re-initialize parameters.
@@ -339,13 +352,6 @@ class GraphTransformerNet(nn.Module):
         for module in modules:
             for param in module.parameters():
                 param.requires_grad = requires_grad
-            # Set BatchNorm to eval mode when freezing
-            for m in module.modules():
-                if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
-                    if requires_grad:
-                        m.train()
-                    else:
-                        m.eval()
 
     def freeze(
         self,
@@ -385,6 +391,7 @@ class GraphTransformerNet(nn.Module):
                 to_freeze.discard(m)
 
         self._set_requires_grad(list(to_freeze), requires_grad=False)
+        self.train(self.training)
         return self
 
     def unfreeze(
@@ -410,6 +417,7 @@ class GraphTransformerNet(nn.Module):
             to_unfreeze.extend(self._get_component_modules(comp))
 
         self._set_requires_grad(to_unfreeze, requires_grad=True)
+        self.train(self.training)
         return self
 
     def get_frozen_status(self) -> Dict[str, Optional[bool]]:
