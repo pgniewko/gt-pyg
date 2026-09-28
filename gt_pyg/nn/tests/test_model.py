@@ -280,8 +280,16 @@ def test_forward_return_latent_is_opt_in_and_backward_compatible(model, sample_i
     assert latent.shape == (1, model.num_aggrs * model.hidden_dim)
 
 
-def test_forward_return_latent_returns_pre_dropout_embedding(model, sample_input):
+def test_forward_return_latent_returns_pre_dropout_embedding(sample_input):
     """Returned latent matches the normalized pooled graph embedding."""
+    model = GraphTransformerNet(
+        node_dim_in=16,
+        edge_dim_in=8,
+        hidden_dim=32,
+        num_gt_layers=2,
+        num_heads=4,
+        norm="ln",
+    )
     model.eval()
 
     with torch.no_grad():
@@ -294,7 +302,8 @@ def test_forward_return_latent_returns_pre_dropout_embedding(model, sample_input
             h, e = gt_layer(x=h, edge_index=sample_input["edge_index"], edge_attr=e)
 
         batch_index = model._get_batch_index(sample_input["batch"])
-        pooled = model.global_pool(h, batch_index)
+        h_final_norm = model.final_norm(h)
+        pooled = model.global_pool(h_final_norm, batch_index)
         expected_latent = model.readout_norm(pooled)
 
         _out, _log_var, latent = model(
@@ -303,6 +312,31 @@ def test_forward_return_latent_returns_pre_dropout_embedding(model, sample_input
         )
 
     assert torch.allclose(latent, expected_latent)
+
+def test_forward_return_latent_applies_final_norm(sample_input):
+    """final_norm is applied to the GTConv output."""
+    model = GraphTransformerNet(
+        node_dim_in=16,
+        edge_dim_in=8,
+        hidden_dim=32,
+        num_gt_layers=2,
+        num_heads=4,
+        norm="ln",
+    )
+    model.eval()
+
+    assert isinstance(model.final_norm, torch.nn.LayerNorm)
+    assert model.final_norm.normalized_shape == (model.hidden_dim,)
+
+    with torch.no_grad():
+        model.final_norm.weight.zero_()
+        model.final_norm.bias.fill_(0.5)
+        _, _, latent = model(**sample_input, return_latent=True)
+
+    assert torch.allclose(
+        latent,
+        torch.full_like(latent, 0.5 * sample_input["x"].size(0)),
+    )
 
 
 # ---- Integration Test ----
