@@ -8,7 +8,6 @@ from rdkit import Chem
 from rdkit.Chem import rdPartialCharges
 
 from gt_pyg.data.atom_features import (
-    PERMITTED_ATOMS,
     get_atom_feature_dim,
     get_atom_features,
     get_gasteiger_charge,
@@ -16,6 +15,7 @@ from gt_pyg.data.atom_features import (
     get_period,
     one_hot_encoding,
 )
+from gt_pyg.data.constants import PERMITTED_ATOMS
 
 
 # ---------------------------------------------------------------------------

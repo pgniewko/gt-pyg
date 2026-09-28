@@ -8,13 +8,15 @@ import pytest
 from rdkit import Chem
 
 from gt_pyg.data.atom_features import (
+    get_pharmacophore_flags,
+)
+from gt_pyg.data.constants import (
     HBA_SMARTS,
     HBD_SMARTS,
     HYDROPHOBIC_SMARTS,
     NEG_IONIZABLE_SMARTS,
     POS_IONIZABLE_SMARTS,
     compile_smarts,
-    get_pharmacophore_flags,
 )
 
 

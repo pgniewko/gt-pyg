@@ -14,7 +14,6 @@ from torch_geometric.data import Data
 from tqdm.auto import tqdm
 
 from .atom_features import (
-    compile_smarts,
     get_atom_features,
     get_pharmacophore_flags,
 )
@@ -22,10 +21,7 @@ from .bond_features import (
     get_bond_feature_dim,
     get_bond_features,
 )
-
-_NEUTRALIZE_SMARTS = compile_smarts(
-    "[+1!h0!$([*]~[-1,-2,-3,-4]),-1!$([*]~[+1,+2,+3,+4])]"
-)
+from .constants import NEUTRALIZE_SMARTS
 
 
 def _check_chembl_pipeline() -> None:
@@ -117,7 +113,7 @@ def _canonicalize_mol(
 
         # Neutralize charges if requested
         if not keep_charges:
-            at_matches = mol.GetSubstructMatches(_NEUTRALIZE_SMARTS)
+            at_matches = mol.GetSubstructMatches(NEUTRALIZE_SMARTS)
             at_matches_list = [y[0] for y in at_matches]
             if len(at_matches_list) > 0:
                 for at_idx in at_matches_list:
