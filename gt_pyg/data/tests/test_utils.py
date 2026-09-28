@@ -150,6 +150,19 @@ class TestInvalidGasteigerCharges:
         assert data_list[0].y.item() == pytest.approx(2.0)
         assert "compound_id=0" in caplog.text
 
+    def test_skips_only_invalid_rows_and_keeps_compound_ids(self, caplog):
+        with caplog.at_level("WARNING", logger="gt_pyg.data.utils"):
+            data_list = get_tensor_data(
+                [BAD_GASTEIGER_SMILES, ETHANOL],
+                [1.0, 2.0],
+                ids=["E-issue94", "ethanol"],
+            )
+
+        assert len(data_list) == 1
+        assert data_list[0].y.shape == (1, 1)
+        assert data_list[0].y.item() == pytest.approx(2.0)
+        assert data_list[0].id == "ethanol"
+        assert "compound_id='E-issue94'" in caplog.text
 
 # ---------------------------------------------------------------------------
 # Label-free inference (y=None)

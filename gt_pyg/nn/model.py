@@ -1,11 +1,11 @@
 import logging
-from typing import Optional, List, Tuple, Union, Dict, Any
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
 logger = logging.getLogger(__name__)
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch_geometric.data import Batch
 from torch_geometric.nn.aggr import (
     AttentionalAggregation,
@@ -14,6 +14,7 @@ from torch_geometric.nn.aggr import (
     SoftmaxAggregation,
 )
 
+from .checkpoint import load_checkpoint, save_checkpoint
 from .gt_conv import GTConv
 from .mlp import MLP
 from .utils import (
@@ -51,20 +52,12 @@ class GraphTransformerNet(nn.Module):
     * ``mu_mlp``      -- predicts the mean of a Gaussian.
     * ``log_var_mlp`` -- predicts the log-variance (clamped to [-10, 10]).
 
-    During **training** the forward pass samples from the predicted Gaussian
-    using the reparameterization trick::
-
-        prediction = mu + std * epsilon,   epsilon ~ N(0, 1)
+    During both training and evaluation, the forward pass always returns the deterministic
+    mean. ``log_var`` is always returned for loss computation or uncertainty
+    estimation.
 
     This enables gradient-based optimization of probabilistic objectives
-    (e.g. Gaussian NLL loss).  Set ``zero_var=True`` to disable sampling
-    and return the deterministic mean instead.  The ``zero_var`` flag only
-    controls whether ``prediction`` is sampled; the returned ``log_var`` still
-    comes from the learned variance head.
-
-    During **evaluation** the forward pass always returns the deterministic
-    mean.  ``log_var`` is always returned for loss computation or uncertainty
-    estimation.
+    (e.g. Gaussian NLL loss).
 
     Reference:
         A Generalization of Transformer Networks to Graphs
@@ -77,7 +70,7 @@ class GraphTransformerNet(nn.Module):
         edge_dim_in: Optional[int] = None,
         hidden_dim: int = 128,
         norm: str = "ln",
-        use_readout_norm: bool = False,
+        readout_norm: bool = False,
         gate: bool = False,
         qkv_bias: bool = False,
         num_gt_layers: int = 4,
@@ -174,7 +167,7 @@ class GraphTransformerNet(nn.Module):
         head_in_dim = self.num_aggrs * hidden_dim
 
         # Readout norm & dropout before heads
-        self.readout_norm = make_norm(norm if use_readout_norm else None, head_in_dim)
+        self.readout_norm = make_norm(norm, head_in_dim) if readout_norm else nn.Identity()
         self.readout_dropout = nn.Dropout(p=resolved_head_dropout)
 
         # Slightly stronger heads (still modest by default)
@@ -217,7 +210,8 @@ class GraphTransformerNet(nn.Module):
             nn.init.xavier_uniform_(self.edge_emb.weight)
 
         self.input_norm.reset_parameters()
-        self.readout_norm.reset_parameters()
+        if not isinstance(self.readout_norm, nn.Identity):
+            self.readout_norm.reset_parameters()
         self.final_norm.reset_parameters()
         self.global_pool.reset_parameters()
         for m in self.gt_layers:
@@ -254,20 +248,14 @@ class GraphTransformerNet(nn.Module):
         edge_index: Tensor,
         edge_attr: Optional[Tensor],
         batch: Union[Batch, Tensor],
-        zero_var: bool = False,
         return_latent: bool = False,
     ) -> Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor]]:
         """Forward pass with variational (reparameterization) sampling.
 
-        In training mode with ``zero_var=False``, ``prediction`` is a
-        stochastic sample from the learned Gaussian::
 
-            pred = mu + exp(0.5 * log_var) * epsilon,  epsilon ~ N(0, 1)
-
-        In eval mode, or when ``zero_var=True``, ``prediction`` is the
-        deterministic mean ``mu``.  ``log_var`` is always returned from the
-        learned variance head; ``zero_var=True`` does not replace it with
-        zeros.
+        ``prediction`` is the deterministic mean ``mu``.  ``log_var`` is
+        always returned from the learned variance head for loss computation
+        or uncertainty estimation.
 
         Args:
             x: Node features ``[num_nodes, node_dim_in]``.
@@ -275,9 +263,6 @@ class GraphTransformerNet(nn.Module):
             edge_attr: Edge features ``[num_edges, edge_dim_in]``.
                 Required if ``edge_dim_in`` was set.
             batch: ``Batch`` object or batch-index tensor ``[num_nodes]``.
-            zero_var: If True, skip sampling even during training.  This
-                affects only ``prediction`` and leaves returned ``log_var``
-                unchanged.
             return_latent: If True, also return the graph-level latent code
                 after readout normalization and before head dropout.
 
@@ -286,6 +271,8 @@ class GraphTransformerNet(nn.Module):
             ``[batch_size, num_tasks]``. If ``return_latent=True``, returns
             ``(prediction, log_var, latent)`` where ``latent`` has shape
             ``[batch_size, num_aggrs * hidden_dim]``.
+
+            ``log_var`` is only meaningful if trained with a variance-aware loss (e.g. Gaussian NLL).
         """
         # Node embedding
         h = self.node_emb(x)  # [N, H]
@@ -320,18 +307,8 @@ class GraphTransformerNet(nn.Module):
         g = self.readout_dropout(latent)
 
         # Heads
-        mu = self.mu_mlp(g)            # [B, T]
-        log_var = self.log_var_mlp(g)  # [B, T]
-
-        # Numerical stability: clamp log_var range a bit
-        log_var = torch.clamp(log_var, min=-10.0, max=10.0)
-        std = torch.exp(0.5 * log_var)  # [B, T]
-
-        if self.training and not zero_var:
-            eps = torch.randn_like(std)
-            pred = mu + std * eps       # reparameterized sample
-        else:
-            pred = mu                   # deterministic mean
+        pred = self.mu_mlp(g)  # [B, T]
+        log_var = torch.clamp(self.log_var_mlp(g), min=-10.0, max=10.0)  # [B, T]
 
         if return_latent:
             return pred, log_var, latent
@@ -495,8 +472,6 @@ class GraphTransformerNet(nn.Module):
             extra: Additional user data.
             require_version: If True, reject checkpoints without usable provenance.
         """
-        from .checkpoint import save_checkpoint
-
         merged_extra = {"frozen_status": self.get_frozen_status()}
         if extra:
             merged_extra.update(extra)
@@ -536,8 +511,6 @@ class GraphTransformerNet(nn.Module):
         Returns:
             Tuple of (model, checkpoint_dict).
         """
-        from .checkpoint import load_checkpoint
-
         checkpoint = load_checkpoint(
             path, map_location=map_location, version_check=version_check,
         )
@@ -563,8 +536,6 @@ class GraphTransformerNet(nn.Module):
                 ``"warn"`` (default) logs a warning, ``"error"`` raises
                 :class:`RuntimeError`, ``"ignore"`` skips the check.
         """
-        from .checkpoint import load_checkpoint
-
         checkpoint = load_checkpoint(
             path, map_location=map_location, version_check=version_check,
         )
