@@ -9,27 +9,34 @@ from rdkit import Chem
 logger = logging.getLogger(__name__)
 
 
+def compile_smarts(pattern: str) -> Chem.Mol:
+    query = Chem.MolFromSmarts(pattern)
+    if query is None:
+        raise ValueError(f"Invalid SMARTS pattern: {pattern}")
+    return query
+
+
 # -----------------------------
 # Pharmacophore SMARTS patterns (precompiled at module load)
 # -----------------------------
 # H-bond donor: N-H (trivalent or protonated), O-H, S-H, aromatic N-H
 # Based on RDKit Lipinski/Gobbi donor definition
-HBD_SMARTS = Chem.MolFromSmarts(
+HBD_SMARTS = compile_smarts(
     "[$([N;!H0;v3]),$([N;!H0;+1;v4]),$([O,S;H1;+0]),$([n;H1;+0])]"
 )
 # H-bond acceptor: divalent O/S, charged O/S, trivalent N (not amide), aromatic heteroatoms
 # Adapted from RDKit Lipinski HAcceptorSmarts (rev. Nov 2008)
-HBA_SMARTS = Chem.MolFromSmarts(
+HBA_SMARTS = compile_smarts(
     "[$([O,S;H1;v2;!$(*-*=[O,N,P,S])]),$([O,S;H0;v2]),$([O,S;-]),"
     "$([N;v3;!$(N-*=!@[O,N,P,S])]),$([nH0,o,s;+0])]"
 )
 # Hydrophobic: any neutral carbon not bonded to N, O, or F
 # Aligned with RDKit BaseFeatures.fdef Carbon_NonPolar definition
-HYDROPHOBIC_SMARTS = Chem.MolFromSmarts("[#6;+0;!$([#6]~[#7,#8,#9])]")
+HYDROPHOBIC_SMARTS = compile_smarts("[#6;+0;!$([#6]~[#7,#8,#9])]")
 # Positive ionizable: basic amines (not amides/anilines), protonated N,
 #   imidazole, guanidine
 # Adapted from RDKit BaseFeatures.fdef
-POS_IONIZABLE_SMARTS = Chem.MolFromSmarts(
+POS_IONIZABLE_SMARTS = compile_smarts(
     "[$([N;H2&+0][C;!$(C=O)]),"               # primary amine (not amide)
     "$([N;H1&+0]([C;!$(C=O)])[C;!$(C=O)]),"   # secondary amine (not amide)
     "$([N;H0&+0]([C;!$(C=O)])([C;!$(C=O)])[C;!$(C=O)]),"  # tertiary amine
@@ -41,7 +48,7 @@ POS_IONIZABLE_SMARTS = Chem.MolFromSmarts(
 # Negative ionizable: carboxylic/sulfonic acids, phosphates, tetrazoles,
 #   sulfonamide NH, boronic acids
 # Extends RDKit BaseFeatures.fdef AcidicGroup
-NEG_IONIZABLE_SMARTS = Chem.MolFromSmarts(
+NEG_IONIZABLE_SMARTS = compile_smarts(
     "[$([C,S](=[O,S,P])-[O;H1,H0&-1]),"      # carboxylic, sulfonic, sulfinic acids
     "$([P](=[O])(-[O;H1,H0&-1])(-[O,C])-[O,C]),"  # phosphates/phosphonates
     "$(c1[nH]nnn1),$(c1nn[nH]n1),"            # tetrazole (both tautomers)
@@ -196,37 +203,13 @@ def get_pharmacophore_flags(mol: Chem.Mol) -> Dict[int, List[int]]:
     """
     num_atoms = mol.GetNumAtoms()
     flags = {i: [0, 0, 0, 0, 0] for i in range(num_atoms)}
+    patterns = (HBD_SMARTS, HBA_SMARTS, HYDROPHOBIC_SMARTS,
+                POS_IONIZABLE_SMARTS, NEG_IONIZABLE_SMARTS)
 
-    # H-bond donors
-    if HBD_SMARTS is not None:
-        for match in mol.GetSubstructMatches(HBD_SMARTS):
+    for slot, pattern in enumerate(patterns):
+        for match in mol.GetSubstructMatches(pattern):
             for idx in match:
-                flags[idx][0] = 1
-
-    # H-bond acceptors
-    if HBA_SMARTS is not None:
-        for match in mol.GetSubstructMatches(HBA_SMARTS):
-            for idx in match:
-                flags[idx][1] = 1
-
-    # Hydrophobic
-    if HYDROPHOBIC_SMARTS is not None:
-        for match in mol.GetSubstructMatches(HYDROPHOBIC_SMARTS):
-            for idx in match:
-                flags[idx][2] = 1
-
-    # Positive ionizable
-    if POS_IONIZABLE_SMARTS is not None:
-        for match in mol.GetSubstructMatches(POS_IONIZABLE_SMARTS):
-            for idx in match:
-                flags[idx][3] = 1
-
-    # Negative ionizable
-    if NEG_IONIZABLE_SMARTS is not None:
-        for match in mol.GetSubstructMatches(NEG_IONIZABLE_SMARTS):
-            for idx in match:
-                flags[idx][4] = 1
-
+                flags[idx][slot] = 1
     return flags
 
 
