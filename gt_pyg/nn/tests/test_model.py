@@ -128,14 +128,22 @@ def test_get_frozen_status_after_freeze_unfreeze(model):
     assert not status["heads"]
 
 
+def _encoder_batchnorms(model):
+    return [model.input_norm] + [
+        m for m in model.gt_layers.modules()
+        if isinstance(m, nn.modules.batchnorm._BatchNorm)
+    ]
+
+
 def test_batchnorm_eval(model):
     """Frozen BatchNorm stays in eval mode even if model.train() is called."""
     model.train()
     model.freeze("encoder")
-    model.train()
+    assert all(not bn.training for bn in _encoder_batchnorms(model))
 
-    # Input norm should be in eval mode
-    assert not model.input_norm.training
+    model.train()
+    assert all(not bn.training for bn in _encoder_batchnorms(model))
+
 
 def test_frozen_batchnorm_stats_unchanged(model, sample_input):
     """Frozen BatchNorm layers do not update running stats during forward."""
@@ -154,15 +162,30 @@ def test_frozen_batchnorm_stats_unchanged(model, sample_input):
     assert torch.equal(bn.running_var, var)
     assert torch.equal(bn.num_batches_tracked, count)
 
+
+def test_unfrozen_batchnorm_stats_update(model, sample_input):
+    """A forward pass in unfrozen train mode updates stats."""
+    model.train()
+    count = model.input_norm.num_batches_tracked.clone()
+    model(**sample_input)
+    assert model.input_norm.num_batches_tracked > count
+
+
 def test_unfreeze_batchnorm_remains_eval(model):
     """Unfreezing in eval mode does not change BatchNorm back to training mode."""
     model.freeze("encoder")
     model.eval()
     model.unfreeze("encoder")
+    assert all(not bn.training for bn in _encoder_batchnorms(model))
 
-    # Input norm should still be in eval mode
-    assert all(not m.training for m in model.modules() if isinstance(m, nn.modules.batchnorm._BatchNorm))
 
+def test_unfreeze_restores_batchnorm_train(model):
+    """Unfreezing in training mode restores BatchNorm training mode."""
+    model.train()
+    model.freeze("encoder")
+    model.train()
+    model.unfreeze("encoder")
+    assert all(bn.training for bn in _encoder_batchnorms(model))
 
 
 def test_invalid_component(model):
