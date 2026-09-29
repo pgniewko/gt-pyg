@@ -94,21 +94,28 @@ class TestSaveLoad:
         assert "created_at" in ckpt
         assert ckpt["checkpoint_version"] == 1
 
-    def test_unknown_version_rejected_by_default(self, model, tmp_path, monkeypatch):
+    def test_unknown_version_rejected_when_required(self, model, tmp_path, monkeypatch):
         monkeypatch.setattr(checkpoint_mod, "__version__", "0+unknown")
 
         with pytest.raises(RuntimeError, match="version is unknown"):
-            save_checkpoint(model, tmp_path / "ckpt.pt")
+            save_checkpoint(model, tmp_path / "ckpt.pt", require_version=True)
 
-    def test_unknown_version_can_warn_when_relaxed(
-        self, model, tmp_path, monkeypatch, caplog,
+        assert not (tmp_path / "ckpt.pt").exists()
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [{}, {"require_version": False}],
+        ids=["default", "explicit_false"],
+    )
+    def test_unknown_version_warns_when_not_required(
+        self, model, tmp_path, monkeypatch, caplog, kwargs
     ):
         import logging
 
         monkeypatch.setattr(checkpoint_mod, "__version__", "0+unknown")
 
         with caplog.at_level(logging.WARNING, logger="gt_pyg.nn.checkpoint"):
-            save_checkpoint(model, tmp_path / "ckpt.pt", require_version=False)
+            save_checkpoint(model, tmp_path / "ckpt.pt", **kwargs)
 
         ckpt = torch.load(tmp_path / "ckpt.pt", map_location="cpu", weights_only=False)
         assert ckpt["gt_pyg_version"] == "0+unknown"
