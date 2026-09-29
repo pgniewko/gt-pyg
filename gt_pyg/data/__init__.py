@@ -1,11 +1,14 @@
-# Atom featurization
-from .atom_features import (
+# Atom feature constants
+from .constants import (
     RING_COUNT_CATEGORIES,
     RING_SIZE_CATEGORIES,
     PERIOD_CATEGORIES,
     GROUP_CATEGORIES,
     PERMITTED_ATOMS,
-    # Functions
+)
+
+# Atom featurization
+from .atom_features import (
     encode_ring_stats,
     one_hot_encoding,
     get_period,

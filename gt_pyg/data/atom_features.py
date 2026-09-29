@@ -1,70 +1,15 @@
 # Standard library
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 # Third-party
 import numpy as np
 from rdkit import Chem
 
+from . import constants as c
+
 logger = logging.getLogger(__name__)
 
-
-# -----------------------------
-# Pharmacophore SMARTS patterns (precompiled at module load)
-# -----------------------------
-# H-bond donor: N-H (trivalent or protonated), O-H, S-H, aromatic N-H
-# Based on RDKit Lipinski/Gobbi donor definition
-HBD_SMARTS = Chem.MolFromSmarts(
-    "[$([N;!H0;v3]),$([N;!H0;+1;v4]),$([O,S;H1;+0]),$([n;H1;+0])]"
-)
-# H-bond acceptor: divalent O/S, charged O/S, trivalent N (not amide), aromatic heteroatoms
-# Adapted from RDKit Lipinski HAcceptorSmarts (rev. Nov 2008)
-HBA_SMARTS = Chem.MolFromSmarts(
-    "[$([O,S;H1;v2;!$(*-*=[O,N,P,S])]),$([O,S;H0;v2]),$([O,S;-]),"
-    "$([N;v3;!$(N-*=!@[O,N,P,S])]),$([nH0,o,s;+0])]"
-)
-# Hydrophobic: any neutral carbon not bonded to N, O, or F
-# Aligned with RDKit BaseFeatures.fdef Carbon_NonPolar definition
-HYDROPHOBIC_SMARTS = Chem.MolFromSmarts("[#6;+0;!$([#6]~[#7,#8,#9])]")
-# Positive ionizable: basic amines (not amides/anilines), protonated N,
-#   imidazole, guanidine
-# Adapted from RDKit BaseFeatures.fdef
-POS_IONIZABLE_SMARTS = Chem.MolFromSmarts(
-    "[$([N;H2&+0][C;!$(C=O)]),"               # primary amine (not amide)
-    "$([N;H1&+0]([C;!$(C=O)])[C;!$(C=O)]),"   # secondary amine (not amide)
-    "$([N;H0&+0]([C;!$(C=O)])([C;!$(C=O)])[C;!$(C=O)]),"  # tertiary amine
-    "$([#7;+;!$([N+]-[O-])]),"                 # already protonated (not nitro)
-    "$(c1c[nH]cn1),"                           # imidazole
-    "$(NC(=N)N)"                               # guanidine
-    ";!$(N[a])]"                               # exclude anilines
-)
-# Negative ionizable: carboxylic/sulfonic acids, phosphates, tetrazoles,
-#   sulfonamide NH, boronic acids
-# Extends RDKit BaseFeatures.fdef AcidicGroup
-NEG_IONIZABLE_SMARTS = Chem.MolFromSmarts(
-    "[$([C,S](=[O,S,P])-[O;H1,H0&-1]),"      # carboxylic, sulfonic, sulfinic acids
-    "$([P](=[O])(-[O;H1,H0&-1])(-[O,C])-[O,C]),"  # phosphates/phosphonates
-    "$(c1[nH]nnn1),$(c1nn[nH]n1),"            # tetrazole (both tautomers)
-    "$([NH]S(=O)(=O)),"                        # sulfonamide NH
-    "$([B]([O;H1])([O;H1]))]"                 # boronic acid
-)
-
-# -----------------------------
-# Global category constants
-# -----------------------------
-RING_COUNT_CATEGORIES = [0, 1, 2, 3, "MoreThanThree"]
-RING_SIZE_CATEGORIES = [3, 4, 5, 6, 7, 8, 9, 10, "MoreThanTen"]
-PERIOD_CATEGORIES = [0, 1, 2, 3, 4, 5, 6, 7]
-# 0 is used for "no group / undefined" (e.g. some f-block elements if RDKit returns 0)
-GROUP_CATEGORIES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-
-# Permitted list of atoms for one-hot encoding
-PERMITTED_ATOMS = [
-    "C", "N", "O", "S", "F", "Si", "P", "Cl", "Br", "Mg", "Na", "Ca", "Fe",
-    "As", "Al", "I", "B", "V", "K", "Tl", "Yb", "Sb", "Sn", "Ag", "Pd",
-    "Co", "Se", "Ti", "Zn", "Li", "Ge", "Cu", "Au", "Ni", "Cd", "In", "Mn",
-    "Zr", "Cr", "Pt", "Hg", "Pb", "Unknown",
-]
 
 def encode_ring_stats(
     stats: Optional[Dict[str, Any]],
@@ -86,9 +31,9 @@ def encode_ring_stats(
     Returns:
         List[int]: Feature vector of length 25.
     """
-    ring_count_enc = [0] * len(RING_COUNT_CATEGORIES)
-    min_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
-    max_ring_size_enc = [0] * len(RING_SIZE_CATEGORIES)
+    ring_count_enc = [0] * len(c.RING_COUNT_CATEGORIES)
+    min_ring_size_enc = [0] * len(c.RING_SIZE_CATEGORIES)
+    max_ring_size_enc = [0] * len(c.RING_SIZE_CATEGORIES)
     in_any_aromatic_ring = 0
     in_any_non_aromatic_ring = 0
 
@@ -96,19 +41,19 @@ def encode_ring_stats(
         count_val = stats["count"]
         if count_val > 3:
             count_val = "MoreThanThree"
-        ring_count_enc = one_hot_encoding(count_val, RING_COUNT_CATEGORIES)
+        ring_count_enc = one_hot_encoding(count_val, c.RING_COUNT_CATEGORIES)
 
         if stats["min_size"] is not None:
             min_size_val = stats["min_size"]
             if min_size_val > 10:
                 min_size_val = "MoreThanTen"
-            min_ring_size_enc = one_hot_encoding(min_size_val, RING_SIZE_CATEGORIES)
+            min_ring_size_enc = one_hot_encoding(min_size_val, c.RING_SIZE_CATEGORIES)
 
         if stats["max_size"] is not None:
             max_size_val = stats["max_size"]
             if max_size_val > 10:
                 max_size_val = "MoreThanTen"
-            max_ring_size_enc = one_hot_encoding(max_size_val, RING_SIZE_CATEGORIES)
+            max_ring_size_enc = one_hot_encoding(max_size_val, c.RING_SIZE_CATEGORIES)
 
         in_any_aromatic_ring = int(stats["has_aromatic"])
         in_any_non_aromatic_ring = int(stats["has_non_aromatic"])
@@ -121,14 +66,14 @@ def encode_ring_stats(
     )
 
 
-def one_hot_encoding(x: Union[str, int, Any], permitted_list: List) -> List[int]:
+def one_hot_encoding(x: Union[str, int, Any], permitted_list: Sequence) -> List[int]:
     """Return a one-hot encoding for ``x`` over a permitted vocabulary.
 
     Any ``x`` not in ``permitted_list`` is mapped to the last element.
 
     Args:
         x: Input token/value (str/int/etc.).
-        permitted_list (List): Allowed vocabulary.
+        permitted_list (Sequence): Allowed vocabulary.
 
     Returns:
         List[int]: One-hot vector of length ``len(permitted_list)``.
@@ -196,37 +141,13 @@ def get_pharmacophore_flags(mol: Chem.Mol) -> Dict[int, List[int]]:
     """
     num_atoms = mol.GetNumAtoms()
     flags = {i: [0, 0, 0, 0, 0] for i in range(num_atoms)}
+    patterns = (c.HBD_SMARTS, c.HBA_SMARTS, c.HYDROPHOBIC_SMARTS,
+                c.POS_IONIZABLE_SMARTS, c.NEG_IONIZABLE_SMARTS)
 
-    # H-bond donors
-    if HBD_SMARTS is not None:
-        for match in mol.GetSubstructMatches(HBD_SMARTS):
+    for slot, pattern in enumerate(patterns):
+        for match in mol.GetSubstructMatches(pattern):
             for idx in match:
-                flags[idx][0] = 1
-
-    # H-bond acceptors
-    if HBA_SMARTS is not None:
-        for match in mol.GetSubstructMatches(HBA_SMARTS):
-            for idx in match:
-                flags[idx][1] = 1
-
-    # Hydrophobic
-    if HYDROPHOBIC_SMARTS is not None:
-        for match in mol.GetSubstructMatches(HYDROPHOBIC_SMARTS):
-            for idx in match:
-                flags[idx][2] = 1
-
-    # Positive ionizable
-    if POS_IONIZABLE_SMARTS is not None:
-        for match in mol.GetSubstructMatches(POS_IONIZABLE_SMARTS):
-            for idx in match:
-                flags[idx][3] = 1
-
-    # Negative ionizable
-    if NEG_IONIZABLE_SMARTS is not None:
-        for match in mol.GetSubstructMatches(NEG_IONIZABLE_SMARTS):
-            for idx in match:
-                flags[idx][4] = 1
-
+                flags[idx][slot] = 1
     return flags
 
 
@@ -351,19 +272,19 @@ def get_atom_features(
     Returns:
         np.ndarray: Atom feature vector.
     """
-    permitted_list_of_atoms = PERMITTED_ATOMS.copy()
+    permitted_list_of_atoms: tuple[str, ...] = c.PERMITTED_ATOMS
     if not hydrogens_implicit:
-        permitted_list_of_atoms = ["H"] + permitted_list_of_atoms
+        permitted_list_of_atoms = ("H",) + permitted_list_of_atoms
 
     atom_type_enc = one_hot_encoding(str(atom.GetSymbol()), permitted_list_of_atoms)
     n_heavy_neighbors_enc = one_hot_encoding(
-        int(atom.GetDegree()), [0, 1, 2, 3, 4, "MoreThanFour"]
+        int(atom.GetDegree()), c.DEGREE_CATEGORIES
     )
     formal_charge_enc = one_hot_encoding(
-        int(atom.GetFormalCharge()), [-3, -2, -1, 0, 1, 2, 3, "Extreme"]
+        int(atom.GetFormalCharge()), c.FORMAL_CHARGE_CATEGORIES
     )
     hybridisation_type_enc = one_hot_encoding(
-        str(atom.GetHybridization()), ["S", "SP", "SP2", "SP3", "SP3D", "SP3D2", "OTHER"]
+        str(atom.GetHybridization()), c.HYBRIDIZATION_CATEGORIES
     )
     is_in_a_ring_enc = [int(atom.IsInRing())]
     is_aromatic_enc = [int(atom.GetIsAromatic())]
@@ -381,28 +302,28 @@ def get_atom_features(
     atomic_num = atom.GetAtomicNum()
 
     period = get_period(atomic_num)
-    period_enc = one_hot_encoding(period, PERIOD_CATEGORIES)
+    period_enc = one_hot_encoding(period, c.PERIOD_CATEGORIES)
     atom_feature_vector += period_enc
 
     group = get_group(atomic_num)  # may be 0 for undefined
-    group_enc = one_hot_encoding(group, GROUP_CATEGORIES)
+    group_enc = one_hot_encoding(group, c.GROUP_CATEGORIES)
     atom_feature_vector += group_enc
 
     if use_stereochemistry:
         chirality_type_enc = one_hot_encoding(
             str(atom.GetChiralTag()),
-            ["CHI_UNSPECIFIED", "CHI_TETRAHEDRAL_CW", "CHI_TETRAHEDRAL_CCW", "CHI_OTHER"],
+            c.CHIRALITY_CATEGORIES,
         )
         atom_feature_vector += chirality_type_enc
 
         cip = atom.GetProp("_CIPCode") if atom.HasProp("_CIPCode") else "Unknown"
         cip = cip.upper()
-        cip_enc = one_hot_encoding(cip, ["R", "S", "UNKNOWN"])
+        cip_enc = one_hot_encoding(cip, c.CIP_CATEGORIES)
         atom_feature_vector += cip_enc
 
     if hydrogens_implicit:
         n_hydrogens_enc = one_hot_encoding(
-            int(atom.GetTotalNumHs()), [0, 1, 2, 3, 4, "MoreThanFour"]
+            int(atom.GetTotalNumHs()), c.NUM_HS_CATEGORIES
         )
         atom_feature_vector += n_hydrogens_enc
 

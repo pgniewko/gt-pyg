@@ -4,15 +4,19 @@ Validates HBD, HBA, HYDROPHOBIC, POS_IONIZABLE, and NEG_IONIZABLE
 patterns against real drug molecules and simple reference compounds.
 """
 
+import pytest
 from rdkit import Chem
 
 from gt_pyg.data.atom_features import (
+    get_pharmacophore_flags,
+)
+from gt_pyg.data.constants import (
     HBA_SMARTS,
     HBD_SMARTS,
     HYDROPHOBIC_SMARTS,
     NEG_IONIZABLE_SMARTS,
     POS_IONIZABLE_SMARTS,
-    get_pharmacophore_flags,
+    compile_smarts,
 )
 
 
@@ -54,22 +58,9 @@ def _atom_index_by_symbol(smiles, symbol, occurrence=0):
 # ---------------------------------------------------------------------------
 
 class TestSmartsCompilation:
-    """All five patterns must compile to valid query molecules."""
-
-    def test_hbd_compiles(self):
-        assert HBD_SMARTS is not None
-
-    def test_hba_compiles(self):
-        assert HBA_SMARTS is not None
-
-    def test_hydrophobic_compiles(self):
-        assert HYDROPHOBIC_SMARTS is not None
-
-    def test_pos_ionizable_compiles(self):
-        assert POS_IONIZABLE_SMARTS is not None
-
-    def test_neg_ionizable_compiles(self):
-        assert NEG_IONIZABLE_SMARTS is not None
+    def test_compile_smarts_raises_on_invalid_pattern(self):
+        with pytest.raises(ValueError, match="Invalid SMARTS"):
+            compile_smarts("[C")
 
 
 # ---------------------------------------------------------------------------
