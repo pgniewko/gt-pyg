@@ -519,6 +519,7 @@ def get_tensor_data(
             edge_index=edge_index,
             edge_attr=edge_attr,
         )
+        data.id = compound_id
 
         # Labels (multi-task friendly) — only when y is provided
         # Shape [1, T] so PyG batching stacks to [B, T], matching model output.
@@ -527,7 +528,6 @@ def get_tensor_data(
             y_mask_arr = np.isfinite(y_arr).astype(np.float32)
             data.y = torch.as_tensor(y_arr, dtype=torch.float).unsqueeze(0)           # [1, T]
             data.y_mask = torch.as_tensor(y_mask_arr, dtype=torch.float).unsqueeze(0)  # [1, T]
-            data.id = compound_id
 
         data_list.append(data)
 
