@@ -164,6 +164,15 @@ class TestInvalidGasteigerCharges:
         assert data_list[0].id == "ethanol"
         assert "compound_id='E-issue94'" in caplog.text
 
+    def test_skips_only_invalid_rows_and_keeps_compound_ids_without_labels(self):
+        data_list = get_tensor_data(
+            [BAD_GASTEIGER_SMILES, ETHANOL],
+            ids=["E-issue94", "ethanol"],
+        )
+
+        assert len(data_list) == 1
+        assert data_list[0].id == "ethanol"
+
 # ---------------------------------------------------------------------------
 # Label-free inference (y=None)
 # ---------------------------------------------------------------------------
